@@ -56,8 +56,6 @@ contract CommitProtocolV04 is
 {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    uint256 public constant BASIS_POINTS = 10000;
-
     address public commitImplementation;
     ProtocolConfig public protocolConfig;
     EnumerableSet.AddressSet private approvedTokens;
