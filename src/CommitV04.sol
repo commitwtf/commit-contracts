@@ -69,9 +69,7 @@ contract CommitV04 is ICommit, ERC721, Ownable, ReentrancyGuard {
             .getProtocolConfig();
 
         // Protocol fee in ETH
-        (bool success, ) = payable(address(protocol)).call{value: pc.joinFee}(
-            ""
-        );
+        (bool success, ) = payable(pc.feeAddress).call{value: pc.joinFee}("");
         require(success, "Protocol fee transfer failed");
 
         // Handle stake and fees
@@ -154,7 +152,7 @@ contract CommitV04 is ICommit, ERC721, Ownable, ReentrancyGuard {
 
         // Transfer protocol share
         if (protocolShare > 0) {
-            TokenUtils.transfer(config.token, address(protocol), protocolShare);
+            TokenUtils.transfer(config.token, pc.feeAddress, protocolShare);
         }
 
         // Transfer client share
@@ -218,7 +216,11 @@ contract CommitV04 is ICommit, ERC721, Ownable, ReentrancyGuard {
         );
 
         uint256 balance = TokenUtils.balanceOf(config.token, address(this));
-        TokenUtils.transfer(config.token, address(protocol), balance);
+        TokenUtils.transfer(
+            config.token,
+            protocol.getProtocolConfig().feeAddress,
+            balance
+        );
     }
 
     function _mint(address to) internal {

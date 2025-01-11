@@ -21,6 +21,7 @@ interface ICommitProtocolV04 {
         uint256 createFee;
         uint256 maxDeadlineDuration;
         string baseURI;
+        address feeAddress;
     }
 
     event ApproveToken(address token, bool isApproved);
@@ -37,7 +38,6 @@ interface ICommitProtocolV04 {
 /* 
 TODO:
 - Add protocolFee address to transfer protocol fees
-- Explore if Commit.verify could be called by anyone?
 - Allow any approved token for funding
 
 */
@@ -101,6 +101,12 @@ contract CommitProtocolV04 is
         require(
             msg.value == protocolConfig.createFee,
             "Incorrect ETH amount for protocol fee"
+        );
+
+        TokenUtils.transfer(
+            address(0),
+            protocolConfig.feeAddress,
+            protocolConfig.createFee
         );
 
         address commitAddress = Clones.clone(commitImplementation);
