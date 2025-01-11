@@ -69,6 +69,12 @@ interface ICommit {
     // Creator can claim fees at any point during the Commit cycle
     function claimFees() external;
 
+    // Participants can claim refund on cancelled commits
+    function claimRefund() external;
+
     // Creator can cancel a commitment and return stakeAmounts to participants
     function cancel() external;
+
+    // Protocol can withdraw funds if needed
+    function withdraw() external;
 }

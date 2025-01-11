@@ -79,7 +79,7 @@ contract CommitProtocolV04 is
 
     function create(
         ICommit.Config calldata _config
-    ) external payable whenNotPaused {
+    ) external payable whenNotPaused returns (address) {
         require(
             _config.token == address(0) ||
                 approvedTokens.contains(_config.token),
@@ -115,6 +115,8 @@ contract CommitProtocolV04 is
             _config.maxParticipants
         );
         ICommit(commitAddress).initialize(_config, address(this));
+
+        return commitAddress;
     }
 
     function tokenURI(
