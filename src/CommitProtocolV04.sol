@@ -27,6 +27,19 @@ interface ICommitProtocolV04 {
     event ApproveToken(address token, bool isApproved);
     event ConfigUpdated();
 
+    event CommitCreated(
+        address indexed commitAddress,
+        address indexed owner,
+        string metadataURI,
+        uint256 joinBefore,
+        uint256 verifyBefore,
+        address verifier,
+        address token,
+        uint256 stake,
+        uint256 fee,
+        uint256 maxParticipants
+    );
+
     function getProtocolConfig() external returns (ProtocolConfig memory);
 
     function tokenURI(
@@ -56,19 +69,6 @@ contract CommitProtocolV04 is
     EnumerableSet.AddressSet private approvedTokens;
 
     uint256[50] private __gap;
-
-    event CommitCreated(
-        address indexed commitAddress,
-        address indexed owner,
-        string metadataURI,
-        uint256 joinBefore,
-        uint256 verifyBefore,
-        address verifier,
-        address token,
-        uint256 stake,
-        uint256 fee,
-        uint256 maxParticipants
-    );
 
     function initialize(
         address _commitImplementation,
