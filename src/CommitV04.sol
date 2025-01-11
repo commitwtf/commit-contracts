@@ -172,7 +172,6 @@ contract CommitV04 is ICommit, ERC721, Ownable, ReentrancyGuard {
             if (remainder > 0) {
                 creatorFees += remainder;
             }
-            TokenUtils.transfer(config.token, config.owner, creatorFees);
         }
 
         finalDistributionAmount = participantPool;
