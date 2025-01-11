@@ -48,12 +48,6 @@ interface ICommitProtocolV04 {
     ) external view returns (string memory);
 }
 
-/* 
-TODO:
-- Add protocolFee address to transfer protocol fees
-- Allow any approved token for funding
-
-*/
 contract CommitProtocolV04 is
     ICommitProtocolV04,
     UUPSUpgradeable,
