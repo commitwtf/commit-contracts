@@ -97,16 +97,16 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     }
 
     function create(
-        Commit calldata commitConfig
+        Commit calldata commit
     )
         public
         payable
         whenNotPaused
-        onlyApprovedToken(commitConfig.token)
+        onlyApprovedToken(commit.token)
         returns (uint256)
     {
         uint256 commitId = commitIds++;
-        commits[commitId] = commitConfig;
+        commits[commitId] = commit;
 
         // Transfer protocol create fee (ETH)
         TokenUtils.transferFrom(
@@ -116,7 +116,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
             config.fee.fee
         );
 
-        emit Created(commitId, commitConfig);
+        emit Created(commitId, commit);
         return commitId;
     }
 
