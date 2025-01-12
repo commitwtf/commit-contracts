@@ -11,20 +11,10 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
     event ApproveToken(address token, bool isApproved);
     event Created(uint256 commitId, Commit config);
-    event Funded(
-        uint256 commitId,
-        address funder,
-        address token,
-        uint256 amount
-    );
+    event Funded(uint256 commitId, address funder, address token, uint256 amount);
     event Joined(uint256 commitId, address participant);
     event Verified(uint256 commitId, address participant, bool isVerified);
-    event Claimed(
-        uint256 commitId,
-        address participant,
-        address token,
-        uint256 amount
-    );
+    event Claimed(uint256 commitId, address participant, address token, uint256 amount);
     event Withdraw(address recipient, address token, uint256 amount);
 
     struct ProtocolConfig {
@@ -32,6 +22,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         string baseURI;
         ProtocolFee fee;
     }
+
     struct ProtocolFee {
         address recipient;
         uint256 fee;
@@ -56,14 +47,17 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         uint256 fee; // Creator fee
         ClientConfig client; // Partners building Apps can earn shares of stakes + fundings
     }
+
     struct Verifier {
         address target;
         bytes data;
     }
+
     struct ClientConfig {
         address recipient;
         uint256 shareBps;
     }
+
     enum ParticipantStatus {
         init,
         joined,
@@ -77,8 +71,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     mapping(uint256 => Commit) public commits;
 
     // participants[commitId][participant] = status
-    mapping(uint256 => mapping(address => ParticipantStatus))
-        public participants;
+    mapping(uint256 => mapping(address => ParticipantStatus)) public participants;
 
     // Mappings for funds[token][recipient] = amount
     mapping(address => mapping(uint256 => uint256)) public funds;
@@ -99,80 +92,49 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         _;
     }
 
-    function create(
-        Commit calldata commit
-    )
+    function create(Commit calldata commit)
         public
         payable
         whenNotPaused
         onlyApprovedToken(commit.token)
         returns (uint256)
     {
+        require(config.fee.shareBps + commit.client.shareBps <= MAX_SHARE_BPS, "Shares cannot exceed 15%");
         require(
-            config.fee.shareBps + commit.client.shareBps <= MAX_SHARE_BPS,
-            "Shares cannot exceed 15%"
+            block.timestamp < commit.joinBefore && commit.joinBefore < commit.verifyBefore, "Validate timestamp error"
         );
-        require(
-            block.timestamp < commit.joinBefore &&
-                commit.joinBefore < commit.verifyBefore,
-            "Validate timestamp error"
-        );
-        require(
-            commit.verifyBefore - block.timestamp < config.maxCommitDuration,
-            "Max commit duration exceeded"
-        );
+        require(commit.verifyBefore - block.timestamp < config.maxCommitDuration, "Max commit duration exceeded");
 
         uint256 commitId = commitIds++;
         commits[commitId] = commit;
 
         // Transfer protocol create fee (ETH)
-        TokenUtils.transferFrom(
-            address(0),
-            _msgSender(),
-            config.fee.recipient,
-            config.fee.fee
-        );
+        TokenUtils.transferFrom(address(0), _msgSender(), config.fee.recipient, config.fee.fee);
 
         emit Created(commitId, commit);
         return commitId;
     }
 
     // Participants can join Commits - cost is stake + fees
-    function join(
-        uint256 commitId,
-        bytes calldata data
-    ) public payable nonReentrant {
+    function join(uint256 commitId, bytes calldata data) public payable nonReentrant {
         Commit memory commit = getCommit(commitId);
         require(block.timestamp < commit.joinBefore, "Join period ended");
-        require(
-            participants[commitId][_msgSender()] == ParticipantStatus.init,
-            "Already joined"
-        );
+        require(participants[commitId][_msgSender()] == ParticipantStatus.init, "Already joined");
         participants[commitId][_msgSender()] = ParticipantStatus.joined;
 
         require(
-            commit.maxParticipants == 0 ||
-                totalSupply(commitId) < commit.maxParticipants,
+            commit.maxParticipants == 0 || totalSupply(commitId) < commit.maxParticipants,
             "Max participants have already joined"
         );
 
         // Check the conditions to join the Commit (ie token holdings, attestation, signature, etc)
         if (commit.joinVerifier.target != address(0)) {
-            bool verified = IVerifier(commit.joinVerifier.target).verify(
-                _msgSender(),
-                commit.joinVerifier.data,
-                data
-            );
+            bool verified = IVerifier(commit.joinVerifier.target).verify(_msgSender(), commit.joinVerifier.data, data);
             require(verified, "Not verified to join");
         }
 
         // Transfer protocol join fee (ETH)
-        TokenUtils.transferFrom(
-            address(0),
-            _msgSender(),
-            config.fee.recipient,
-            config.fee.fee
-        );
+        TokenUtils.transferFrom(address(0), _msgSender(), config.fee.recipient, config.fee.fee);
 
         // Add stake to Commit funds
         funds[commit.token][commitId] += commit.stake;
@@ -181,12 +143,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         claims[commit.token][commit.owner] += commit.fee;
 
         // Transfer stake + creator fee
-        TokenUtils.transferFrom(
-            commit.token,
-            _msgSender(),
-            address(this),
-            commit.stake + commit.fee
-        );
+        TokenUtils.transferFrom(commit.token, _msgSender(), address(this), commit.stake + commit.fee);
 
         // Mint ERC1155 NFT
         _mint(_msgSender(), commitId, 1, "");
@@ -195,16 +152,14 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     }
 
     // Anyone can fund Commits with approved tokens
-    function fund(
-        uint256 commitId,
-        address token,
-        uint256 amount
-    ) public payable whenNotPaused onlyApprovedToken(token) {
+    function fund(uint256 commitId, address token, uint256 amount)
+        public
+        payable
+        whenNotPaused
+        onlyApprovedToken(token)
+    {
         Commit memory commit = getCommit(commitId);
-        require(
-            block.timestamp < commit.verifyBefore,
-            "Verification period ended"
-        );
+        require(block.timestamp < commit.verifyBefore, "Verification period ended");
 
         // Add tokens to Commit funds
         funds[token][commitId] += amount;
@@ -213,27 +168,13 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     }
 
     // Anyone can verify a participant - the verifier contract checks validity
-    function verify(
-        uint256 commitId,
-        address participant,
-        bytes calldata data
-    ) public payable returns (bool) {
+    function verify(uint256 commitId, address participant, bytes calldata data) public payable returns (bool) {
         Commit memory commit = getCommit(commitId);
-        require(
-            block.timestamp < commit.verifyBefore,
-            "Verification period ended"
-        );
-        require(
-            participants[commitId][participant] == ParticipantStatus.joined,
-            "Already verified"
-        );
+        require(block.timestamp < commit.verifyBefore, "Verification period ended");
+        require(participants[commitId][participant] == ParticipantStatus.joined, "Already verified");
 
         // Check the conditions to claim the Commit rewards (ie token holdings, attestation, signature, etc)
-        bool verified = IVerifier(commit.fulfillVerifier.target).verify(
-            participant,
-            commit.fulfillVerifier.data,
-            data
-        );
+        bool verified = IVerifier(commit.fulfillVerifier.target).verify(participant, commit.fulfillVerifier.data, data);
 
         // Mark as verified
         if (verified) {
@@ -246,14 +187,8 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     }
 
     // Verified participants can claim rewards - (funded + stake) / verifiedCount - fees
-    function claim(
-        uint256 commitId,
-        address participant
-    ) public payable nonReentrant {
-        require(
-            participants[commitId][participant] == ParticipantStatus.verified,
-            "Must be verified"
-        );
+    function claim(uint256 commitId, address participant) public payable nonReentrant {
+        require(participants[commitId][participant] == ParticipantStatus.verified, "Must be verified");
         participants[commitId][participant] = ParticipantStatus.claimed;
 
         // Loop over all approved tokens
@@ -299,19 +234,14 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     }
 
     // Creators, clients, and protocol can withdraw fees
-    function withdraw(
-        address token,
-        address account
-    ) public payable nonReentrant {
+    function withdraw(address token, address account) public payable nonReentrant {
         uint256 amount = claims[token][account];
         claims[token][account] = 0;
         TokenUtils.transfer(token, account, amount);
         emit Withdraw(account, token, amount);
     }
 
-    function getCommit(
-        uint256 commitId
-    ) public view returns (Commit memory commit) {
+    function getCommit(uint256 commitId) public view returns (Commit memory commit) {
         require(commitId < commitIds, "Commit not found");
         return commits[commitId];
     }

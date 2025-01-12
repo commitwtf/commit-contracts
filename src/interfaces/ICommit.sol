@@ -38,11 +38,13 @@ interface ICommit {
         // Note: Milestones not implemented yet
         Milestone[] milestones; // (Optional) Define milestones
     }
+
     struct ClientConfig {
         address recipient;
         uint256 fee;
         uint256 share;
     }
+
     struct Milestone {
         uint256 deadline; // Timestamp when participant must verify before
         string metadataURI; // (Optional) Details about milestone
@@ -58,10 +60,7 @@ interface ICommit {
 
     // Participants can verify they've completed a commit (use simulate to check status without paying gas)
     // Sets verified[address] = true (or verified[address][milestoneIndex] = true)
-    function verify(
-        address participant,
-        bytes calldata data
-    ) external returns (bool);
+    function verify(address participant, bytes calldata data) external returns (bool);
 
     // Verified participants can claim their share of the rewards (stake + rewards)
     // Verifies each milestone?

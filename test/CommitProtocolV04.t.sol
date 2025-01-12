@@ -82,14 +82,8 @@ contract CommitProtocolV04Test is Test {
             joinBefore: block.timestamp + 1 days,
             verifyBefore: block.timestamp + 2 days,
             maxParticipants: 2,
-            joinVerifier: CommitProtocolV04.Verifier({
-                target: address(verifier),
-                data: ""
-            }),
-            fulfillVerifier: CommitProtocolV04.Verifier({
-                target: address(verifier),
-                data: ""
-            }),
+            joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
+            fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
             token: address(stakeToken),
             stake: 10 ether,
             fee: 2 ether,
@@ -104,16 +98,10 @@ contract CommitProtocolV04Test is Test {
         createdCommitId = commitId; // store for other tests
         // Check that commitId increments
         assertEq(commitId, 0, "First commit should have ID 0");
-        assertEq(
-            commitProtocol.commitIds(),
-            1,
-            "commitIds should be 1 after creation"
-        );
+        assertEq(commitProtocol.commitIds(), 1, "commitIds should be 1 after creation");
 
         // Verify the commit data is stored properly
-        CommitProtocolV04.Commit memory stored = commitProtocol.getCommit(
-            commitId
-        );
+        CommitProtocolV04.Commit memory stored = commitProtocol.getCommit(commitId);
         assertEq(stored.owner, alice, "Owner mismatch");
         assertEq(stored.maxParticipants, 2, "Max participants mismatch");
         assertEq(stored.token, address(stakeToken), "Token mismatch");
@@ -132,21 +120,12 @@ contract CommitProtocolV04Test is Test {
                 joinBefore: block.timestamp + 1 days,
                 verifyBefore: block.timestamp + 2 days,
                 maxParticipants: 2,
-                joinVerifier: CommitProtocolV04.Verifier({
-                    target: address(verifier),
-                    data: ""
-                }),
-                fulfillVerifier: CommitProtocolV04.Verifier({
-                    target: address(verifier),
-                    data: ""
-                }),
+                joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
+                fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
                 token: address(stakeToken),
                 stake: 10 ether,
                 fee: 2 ether,
-                client: CommitProtocolV04.ClientConfig({
-                    recipient: address(0xBEEF),
-                    shareBps: 900
-                })
+                client: CommitProtocolV04.ClientConfig({recipient: address(0xBEEF), shareBps: 900})
             })
         );
         vm.stopPrank();
@@ -160,12 +139,8 @@ contract CommitProtocolV04Test is Test {
         commitProtocol.join{value: 0.01 ether}(commitId, "");
 
         // Check Bob's participant status
-        CommitProtocolV04.ParticipantStatus status = commitProtocol
-            .participants(commitId, bob);
-        assertEq(
-            uint256(status),
-            uint256(CommitProtocolV04.ParticipantStatus.joined)
-        );
+        CommitProtocolV04.ParticipantStatus status = commitProtocol.participants(commitId, bob);
+        assertEq(uint256(status), uint256(CommitProtocolV04.ParticipantStatus.joined));
 
         // Also check that stake got pulled in
         // commit.stake + commit.fee = 12 ether
@@ -173,10 +148,7 @@ contract CommitProtocolV04Test is Test {
         uint256 staked = commitProtocol.funds(address(stakeToken), commitId);
         assertEq(staked, 10 ether, "Stake not recorded properly");
 
-        uint256 creatorClaim = commitProtocol.claims(
-            address(stakeToken),
-            alice
-        );
+        uint256 creatorClaim = commitProtocol.claims(address(stakeToken), alice);
         assertEq(creatorClaim, 2 ether, "Creator fee not recorded properly");
         vm.stopPrank();
     }
@@ -194,14 +166,8 @@ contract CommitProtocolV04Test is Test {
                     joinBefore: block.timestamp + 1 days,
                     verifyBefore: block.timestamp + 2 days,
                     maxParticipants: 0, // no limit
-                    joinVerifier: CommitProtocolV04.Verifier({
-                        target: address(verifier),
-                        data: ""
-                    }),
-                    fulfillVerifier: CommitProtocolV04.Verifier({
-                        target: address(verifier),
-                        data: ""
-                    }),
+                    joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
+                    fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
                     token: address(stakeToken),
                     stake: 20 ether,
                     fee: 5 ether,
@@ -248,12 +214,7 @@ contract CommitProtocolV04Test is Test {
 
         // We'll do a simple assertion that Bob's new balance is at least 18 more
         // than before, ignoring small edge cases.
-        assertApproxEqRel(
-            bobBalanceAfter - bobBalanceBefore,
-            18 ether,
-            1e16,
-            "Bob's staked return not as expected"
-        );
+        assertApproxEqRel(bobBalanceAfter - bobBalanceBefore, 18 ether, 1e16, "Bob's staked return not as expected");
     }
 
     function testFundAndClaimMultipleTokens() public {
@@ -267,21 +228,12 @@ contract CommitProtocolV04Test is Test {
                 joinBefore: block.timestamp + 1 days,
                 verifyBefore: block.timestamp + 2 days,
                 maxParticipants: 0,
-                joinVerifier: CommitProtocolV04.Verifier({
-                    target: address(verifier),
-                    data: ""
-                }),
-                fulfillVerifier: CommitProtocolV04.Verifier({
-                    target: address(verifier),
-                    data: ""
-                }),
+                joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
+                fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
                 token: address(stakeToken),
                 stake: 10 ether,
                 fee: 2 ether,
-                client: CommitProtocolV04.ClientConfig({
-                    recipient: address(0xBEEF),
-                    shareBps: 500
-                })
+                client: CommitProtocolV04.ClientConfig({recipient: address(0xBEEF), shareBps: 500})
             })
         );
         vm.stopPrank();
@@ -311,10 +263,7 @@ contract CommitProtocolV04Test is Test {
         // Check that funds are recorded for both stakeToken & altToken
         // stakeToken: 10 staked
         // altToken:   50 funded
-        uint256 stakeFunds = commitProtocol.funds(
-            address(stakeToken),
-            commitId
-        );
+        uint256 stakeFunds = commitProtocol.funds(address(stakeToken), commitId);
         uint256 altFunds = commitProtocol.funds(address(altToken), commitId);
         assertEq(stakeFunds, 10 ether, "stakeFunds mismatch");
         assertEq(altFunds, 50 ether, "altFunds mismatch");
@@ -332,10 +281,7 @@ contract CommitProtocolV04Test is Test {
         // He should have gained some STK and ALT
         // Fees go to protocolFee.recipient & client. Bob gets the rest.
         // We won't do precise math here. Just check that Bob's balances have increased.
-        assertTrue(
-            bobStakeBalAfter > bobStakeBalBefore + 1,
-            "Bob STK claim failed"
-        );
+        assertTrue(bobStakeBalAfter > bobStakeBalBefore + 1, "Bob STK claim failed");
         assertTrue(bobAltBalAfter > bobAltBalBefore, "Bob ALT claim failed");
     }
 
@@ -350,21 +296,12 @@ contract CommitProtocolV04Test is Test {
                 joinBefore: block.timestamp + 1 days,
                 verifyBefore: block.timestamp + 2 days,
                 maxParticipants: 0,
-                joinVerifier: CommitProtocolV04.Verifier({
-                    target: address(verifier),
-                    data: ""
-                }),
-                fulfillVerifier: CommitProtocolV04.Verifier({
-                    target: address(verifier),
-                    data: ""
-                }),
+                joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
+                fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
                 token: address(stakeToken),
                 stake: 10 ether,
                 fee: 2 ether,
-                client: CommitProtocolV04.ClientConfig({
-                    recipient: address(0xBEEF),
-                    shareBps: 500
-                })
+                client: CommitProtocolV04.ClientConfig({recipient: address(0xBEEF), shareBps: 500})
             })
         );
         vm.stopPrank();
@@ -386,15 +323,7 @@ contract CommitProtocolV04Test is Test {
         vm.stopPrank();
         uint256 aliceBalAfter = stakeToken.balanceOf(alice);
 
-        assertEq(
-            commitProtocol.claims(address(stakeToken), alice),
-            0,
-            "Claim not cleared"
-        );
-        assertEq(
-            aliceBalAfter - aliceBalBefore,
-            2 ether,
-            "Incorrect withdrawal amount"
-        );
+        assertEq(commitProtocol.claims(address(stakeToken), alice), 0, "Claim not cleared");
+        assertEq(aliceBalAfter - aliceBalBefore, 2 ether, "Incorrect withdrawal amount");
     }
 }

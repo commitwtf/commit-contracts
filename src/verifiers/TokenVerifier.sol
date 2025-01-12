@@ -11,30 +11,16 @@ interface ITokenBalance {
 
 // Verifies token holdings
 contract TokenVerifier is IVerifier {
-    function verify(
-        address participant,
-        bytes calldata data,
-        bytes calldata
-    ) external view returns (bool) {
-        (address token, uint256 minBalance) = abi.decode(
-            data,
-            (address, uint256)
-        );
+    function verify(address participant, bytes calldata data, bytes calldata) external view returns (bool) {
+        (address token, uint256 minBalance) = abi.decode(data, (address, uint256));
         // ERC20 and ERC721 share the same interface for balanceOf
         return ITokenBalance(token).balanceOf(participant) >= minBalance;
     }
 }
 
 contract ERC1155Verifier is IVerifier {
-    function verify(
-        address account,
-        bytes calldata data,
-        bytes calldata
-    ) external view returns (bool) {
-        (address token, uint256 minBalance, uint256 id) = abi.decode(
-            data,
-            (address, uint256, uint256)
-        );
+    function verify(address account, bytes calldata data, bytes calldata) external view returns (bool) {
+        (address token, uint256 minBalance, uint256 id) = abi.decode(data, (address, uint256, uint256));
         return IERC1155(token).balanceOf(account, id) >= minBalance;
     }
 }

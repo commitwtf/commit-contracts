@@ -21,7 +21,7 @@ library TokenUtils {
     function transfer(address token, address to, uint256 amount) internal {
         if (token == address(0)) {
             // Transfer native ETH
-            (bool success, ) = payable(to).call{value: amount}("");
+            (bool success,) = payable(to).call{value: amount}("");
             require(success, "ETH transfer failed");
         } else {
             // Transfer ERC20 token safely
@@ -39,19 +39,14 @@ library TokenUtils {
      * NOTE: For native ETH (`token == address(0)`), this library expects that
      *       the caller has already sent ETH along with the transaction (`msg.value == amount`).
      */
-    function transferFrom(
-        address token,
-        address from,
-        address to,
-        uint256 amount
-    ) internal {
+    function transferFrom(address token, address from, address to, uint256 amount) internal {
         if (token == address(0)) {
             // For ETH, the 'from' address must match msg.sender
             require(from == msg.sender, "Sender mismatch for ETH transfer");
             require(msg.value == amount, "Incorrect ETH amount sent");
 
             // ETH already received with the call, so we just forward it to 'to'
-            (bool success, ) = payable(to).call{value: amount}("");
+            (bool success,) = payable(to).call{value: amount}("");
             require(success, "ETH transfer failed");
         } else {
             // Safe transferFrom for ERC20 token
@@ -59,10 +54,7 @@ library TokenUtils {
         }
     }
 
-    function balanceOf(
-        address token,
-        address account
-    ) internal view returns (uint256) {
+    function balanceOf(address token, address account) internal view returns (uint256) {
         if (token == address(0)) {
             return address(account).balance;
         } else {

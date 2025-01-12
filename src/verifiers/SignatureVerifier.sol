@@ -12,31 +12,21 @@ contract SignatureVerifier is IVerifier {
 
     uint256 public constant SIGNATURE_EXPIRY = 15 minutes;
 
-    function verify(
-        address participant,
-        bytes calldata data,
-        bytes calldata userdata
-    ) external view override returns (bool) {
+    function verify(address participant, bytes calldata data, bytes calldata userdata)
+        external
+        view
+        override
+        returns (bool)
+    {
         address signer = abi.decode(data, (address));
-        (
-            bytes32 hash,
-            uint256 timestamp,
-            address commitId,
-            bytes memory signature
-        ) = abi.decode(userdata, (bytes32, uint256, address, bytes));
+        (bytes32 hash, uint256 timestamp, address commitId, bytes memory signature) =
+            abi.decode(userdata, (bytes32, uint256, address, bytes));
 
         // Ensure the signature hasn't expired
-        require(
-            block.timestamp <= timestamp + SIGNATURE_EXPIRY,
-            "Signature expired"
-        );
+        require(block.timestamp <= timestamp + SIGNATURE_EXPIRY, "Signature expired");
 
         // Verify signed hash contains participant, correct timestamp and commitId
-        require(
-            hash ==
-                keccak256(abi.encodePacked(participant, timestamp, commitId)),
-            "Hash mismatch"
-        );
+        require(hash == keccak256(abi.encodePacked(participant, timestamp, commitId)), "Hash mismatch");
         return hash.toEthSignedMessageHash().recover(signature) == signer;
     }
 }
