@@ -92,7 +92,6 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
     modifier onlyApprovedToken(address token) {
         require(approvedTokens.contains(token), "Token not approved");
-
         _;
     }
 
@@ -116,7 +115,6 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     // Participants can join Commits - cost is stake + fees
     function join(
         uint256 commitId,
-        address referral, // Transfer referral bonus from sharing link to Commit
         bytes calldata data
     ) public payable nonReentrant {
         require(
@@ -154,7 +152,10 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         // Add stake to Commit funds
         funds[commit.token][commitId] += commit.stake;
 
-        // Transfer stake
+        // Set aside creator fee to be claimed
+        claims[commit.token][commit.owner] += commit.fee;
+
+        // Transfer stake + creator fee
         TokenUtils.transferFrom(
             commit.token,
             _msgSender(),
