@@ -112,6 +112,16 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
             config.fee.shareBps + commit.client.shareBps <= MAX_SHARE_BPS,
             "Shares cannot exceed 15%"
         );
+        require(
+            block.timestamp < commit.joinBefore &&
+                commit.joinBefore < commit.verifyBefore,
+            "Validate timestamp error"
+        );
+        require(
+            commit.verifyBefore - block.timestamp < config.maxCommitDuration,
+            "Max commit duration exceeded"
+        );
+
         uint256 commitId = commitIds++;
         commits[commitId] = commit;
 
