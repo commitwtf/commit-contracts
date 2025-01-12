@@ -125,20 +125,19 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         uint256 commitId,
         bytes calldata data
     ) public payable nonReentrant {
+        Commit memory commit = getCommit(commitId);
+        require(block.timestamp < commit.joinBefore, "Join period ended");
         require(
             participants[commitId][_msgSender()] == ParticipantStatus.init,
             "Already joined"
         );
         participants[commitId][_msgSender()] = ParticipantStatus.joined;
 
-        Commit memory commit = getCommit(commitId);
-
         require(
             commit.maxParticipants == 0 ||
                 totalSupply(commitId) < commit.maxParticipants,
             "Max participants have already joined"
         );
-        require(block.timestamp < commit.joinBefore, "Join period ended");
 
         // Check the conditions to join the Commit (ie token holdings, attestation, signature, etc)
         if (commit.joinVerifier.target != address(0)) {
