@@ -89,6 +89,9 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
     EnumerableSet.AddressSet private approvedTokens;
 
+    // Max share = 15%
+    uint256 public immutable MAX_SHARE_BPS = 1500;
+
     uint256[50] private __gap;
 
     modifier onlyApprovedToken(address token) {
@@ -105,6 +108,10 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         onlyApprovedToken(commit.token)
         returns (uint256)
     {
+        require(
+            config.fee.shareBps + commit.client.shareBps <= MAX_SHARE_BPS,
+            "Shares cannot exceed 15%"
+        );
         uint256 commitId = commitIds++;
         commits[commitId] = commit;
 
