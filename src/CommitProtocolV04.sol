@@ -302,6 +302,12 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         _setURI(newuri);
     }
 
+    function setProtocolConfig(
+        ProtocolConfig calldata _config
+    ) public onlyOwner {
+        config = _config;
+    }
+
     // TODO: Set limits on emergency withdraw?
     function emergencyWithdraw(address token, uint256 amount) public onlyOwner {
         TokenUtils.transfer(token, _msgSender(), amount);
