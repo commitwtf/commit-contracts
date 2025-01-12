@@ -22,7 +22,8 @@ contract CommitProtocolERC1155 is
 {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
-        _disableInitializers();
+        // TODO: Fix tests to work with _disableInitializers()
+        // _disableInitializers();
     }
 
     function initialize(address initialOwner) public initializer {
