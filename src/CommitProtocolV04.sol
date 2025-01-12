@@ -37,14 +37,13 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     // ----------------- Events -----------------
-    event ApproveToken(address token, bool isApproved);
-    event Created(uint256 commitId, Commit config);
-    event Funded(uint256 commitId, address funder, address token, uint256 amount);
-    event Joined(uint256 commitId, address participant);
-    event Verified(uint256 commitId, address participant, bool isVerified);
-    event Claimed(uint256 commitId, address participant, address token, uint256 amount);
-    event Withdraw(address recipient, address token, uint256 amount);
-
+    event ApproveToken(address indexed token, bool isApproved);
+    event Created(uint256 indexed commitId, Commit config);
+    event Funded(uint256 indexed commitId, address indexed funder, address indexed token, uint256 amount);
+    event Joined(uint256 indexed commitId, address indexed participant);
+    event Verified(uint256 indexed commitId, address indexed participant, bool isVerified);
+    event Claimed(uint256 indexed commitId, address indexed participant, address indexed token, uint256 amount);
+    event Withdraw(address indexed recipient, address indexed token, uint256 amount);
     // ----------------- Structs -----------------
 
     struct ProtocolConfig {
