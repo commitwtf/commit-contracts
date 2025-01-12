@@ -225,10 +225,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     }
 
     // Verified participants can claim rewards - (funded + stake) / verifiedCount - fees
-    function claim(
-        uint256 commitId,
-        address token
-    ) public payable nonReentrant {
+    function claim(uint256 commitId) public payable nonReentrant {
         require(
             participants[commitId][_msgSender()] == ParticipantStatus.verified,
             "Must be verified"
@@ -238,30 +235,41 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         Commit memory commit = getCommit(commitId);
         require(block.timestamp > commit.verifyBefore, "Still verifying");
 
-        uint256 amount = rewards[token][commitId];
+        // Loop over all approved tokens
+        uint256 length = approvedTokens.length();
+        for (uint256 i = 0; i < length; i++) {
+            address token = approvedTokens.at(i);
 
-        // First claim attempt calculates the rewards
-        if (amount == 0) {
-            calculate(commitId, token);
+            // If we haven't computed rewards for this token yet, do it now
+            if (rewards[token][commitId] == 0) {
+                calculate(commitId, token);
+            }
+
+            uint256 amount = rewards[token][commitId];
+            // If there's a reward for each verified user, transfer it
+            if (amount > 0) {
+                TokenUtils.transfer(token, _msgSender(), amount);
+                emit Claimed(commitId, _msgSender(), token, amount);
+            }
         }
-
-        TokenUtils.transfer(token, _msgSender(), amount);
-        emit Claimed(commitId, _msgSender(), commit.token, amount);
     }
 
     // Calculates the reward for a token and Commit
     function calculate(uint256 commitId, address token) public {
         require(verifiedCount[commitId] > 0, "No verified participants");
-        Commit memory commit = getCommit(commitId);
 
+        Commit memory commit = getCommit(commitId);
         uint256 amount = funds[token][commitId];
 
-        // Set aside Protocol + Creator + Client fees
+        // Compute client and protocol shares
         uint256 clientShare = (amount * commit.client.shareBps) / 10000;
         uint256 protocolShare = (amount * config.fee.shareBps) / 10000;
+
+        // Accumulate those shares in claims
         claims[token][commit.client.recipient] += clientShare;
         claims[token][config.fee.recipient] += protocolShare;
 
+        // The remainder is split among verified participants
         uint256 rewardsPool = amount - clientShare - protocolShare;
 
         funds[token][commitId] = 0;
