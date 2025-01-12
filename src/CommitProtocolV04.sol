@@ -127,7 +127,8 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         Commit memory commit = getCommit(commitId);
 
         require(
-            totalSupply(commitId) < commit.maxParticipants,
+            commit.maxParticipants == 0 ||
+                totalSupply(commitId) < commit.maxParticipants,
             "Max participants have already joined"
         );
         require(block.timestamp < commit.joinBefore, "Join period ended");
