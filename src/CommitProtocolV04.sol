@@ -45,7 +45,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         // Commit period
         uint256 joinBefore;
         uint256 verifyBefore;
-        uint256 maxParticipants; // (Optional) Limit how many participants can join (this just sets the ERC721 supply)
+        uint256 maxParticipants; // (Optional) Limit how many participants can join
         // Verifiers
         Verifier joinVerifier;
         Verifier fulfillVerifier;
