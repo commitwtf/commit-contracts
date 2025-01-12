@@ -98,7 +98,13 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
     function create(
         Commit calldata commitConfig
-    ) public payable whenNotPaused onlyApprovedToken(commitConfig.token) {
+    )
+        public
+        payable
+        whenNotPaused
+        onlyApprovedToken(commitConfig.token)
+        returns (uint256)
+    {
         uint256 commitId = commitIds++;
         commits[commitId] = commitConfig;
 
@@ -111,6 +117,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         );
 
         emit Created(commitId, commitConfig);
+        return commitId;
     }
 
     // Participants can join Commits - cost is stake + fees
@@ -171,41 +178,6 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         emit Joined(commitId, _msgSender());
     }
 
-    // Anyone can verify a participant - the verifier contract checks validity
-    function verify(
-        uint256 commitId,
-        address participant,
-        bytes calldata data
-    ) public payable returns (bool) {
-        require(
-            participants[commitId][participant] == ParticipantStatus.joined,
-            "Already verified"
-        );
-
-        Commit memory commit = getCommit(commitId);
-        require(
-            block.timestamp < commit.verifyBefore,
-            "Verification period ended"
-        );
-
-        // Check the conditions to claim the Commit rewards (ie token holdings, attestation, signature, etc)
-        bool verified = IVerifier(commit.fulfillVerifier.target).verify(
-            participant,
-            commit.fulfillVerifier.data,
-            data
-        );
-
-        // Mark as verified
-        if (verified) {
-            participants[commitId][participant] = ParticipantStatus.verified;
-        }
-
-        emit Verified(commitId, participant, verified);
-
-        verifiedCount[commitId]++;
-        return verified;
-    }
-
     // Anyone can fund Commits with approved tokens
     function fund(
         uint256 commitId,
@@ -224,16 +196,49 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         emit Funded(commitId, _msgSender(), token, amount);
     }
 
-    // Verified participants can claim rewards - (funded + stake) / verifiedCount - fees
-    function claim(uint256 commitId) public payable nonReentrant {
+    // Anyone can verify a participant - the verifier contract checks validity
+    function verify(
+        uint256 commitId,
+        address participant,
+        bytes calldata data
+    ) public payable returns (bool) {
+        Commit memory commit = getCommit(commitId);
         require(
-            participants[commitId][_msgSender()] == ParticipantStatus.verified,
+            block.timestamp < commit.verifyBefore,
+            "Verification period ended"
+        );
+        require(
+            participants[commitId][participant] == ParticipantStatus.joined,
+            "Already verified"
+        );
+
+        // Check the conditions to claim the Commit rewards (ie token holdings, attestation, signature, etc)
+        bool verified = IVerifier(commit.fulfillVerifier.target).verify(
+            participant,
+            commit.fulfillVerifier.data,
+            data
+        );
+
+        // Mark as verified
+        if (verified) {
+            participants[commitId][participant] = ParticipantStatus.verified;
+        }
+
+        verifiedCount[commitId]++;
+        emit Verified(commitId, participant, verified);
+        return verified;
+    }
+
+    // Verified participants can claim rewards - (funded + stake) / verifiedCount - fees
+    function claim(
+        uint256 commitId,
+        address participant
+    ) public payable nonReentrant {
+        require(
+            participants[commitId][participant] == ParticipantStatus.verified,
             "Must be verified"
         );
-        participants[commitId][_msgSender()] = ParticipantStatus.claimed;
-
-        Commit memory commit = getCommit(commitId);
-        require(block.timestamp > commit.verifyBefore, "Still verifying");
+        participants[commitId][participant] = ParticipantStatus.claimed;
 
         // Loop over all approved tokens
         uint256 length = approvedTokens.length();
@@ -242,23 +247,24 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
             // If we haven't computed rewards for this token yet, do it now
             if (rewards[token][commitId] == 0) {
-                calculate(commitId, token);
+                distribute(commitId, token);
             }
 
             uint256 amount = rewards[token][commitId];
             // If there's a reward for each verified user, transfer it
             if (amount > 0) {
-                TokenUtils.transfer(token, _msgSender(), amount);
-                emit Claimed(commitId, _msgSender(), token, amount);
+                TokenUtils.transfer(token, participant, amount);
+                emit Claimed(commitId, participant, token, amount);
             }
         }
     }
 
     // Calculates the reward for a token and Commit
-    function calculate(uint256 commitId, address token) public {
+    function distribute(uint256 commitId, address token) public {
+        Commit memory commit = getCommit(commitId);
+        require(block.timestamp > commit.verifyBefore, "Still verifying");
         require(verifiedCount[commitId] > 0, "No verified participants");
 
-        Commit memory commit = getCommit(commitId);
         uint256 amount = funds[token][commitId];
 
         // Compute client and protocol shares
@@ -277,11 +283,14 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     }
 
     // Creators, clients, and protocol can withdraw fees
-    function withdraw(address token) public payable nonReentrant {
-        uint256 amount = claims[token][_msgSender()];
-        claims[token][_msgSender()] = 0;
-        TokenUtils.transfer(token, _msgSender(), amount);
-        emit Withdraw(_msgSender(), token, amount);
+    function withdraw(
+        address token,
+        address account
+    ) public payable nonReentrant {
+        uint256 amount = claims[token][account];
+        claims[token][account] = 0;
+        TokenUtils.transfer(token, account, amount);
+        emit Withdraw(account, token, amount);
     }
 
     function getCommit(
@@ -298,14 +307,12 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
     // Set tokenURI for token metadata
     // eg. https://commit.wtf/api/commit/{id}.json - this will dynamically generate the metadata based on token status (verified, claimed, rewards etc)
-    function setURI(string memory newuri) public onlyOwner {
-        _setURI(newuri);
+    function setURI(string memory uri) public onlyOwner {
+        _setURI(uri);
     }
 
-    function setProtocolConfig(
-        ProtocolConfig calldata _config
-    ) public onlyOwner {
-        config = _config;
+    function setProtocolConfig(ProtocolConfig calldata _c) public onlyOwner {
+        config = _c;
     }
 
     // TODO: Set limits on emergency withdraw?
