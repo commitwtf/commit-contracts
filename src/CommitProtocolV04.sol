@@ -6,6 +6,27 @@ import {TokenUtils} from "./libraries/TokenUtils.sol";
 import {IVerifier} from "./interfaces/IVerifier.sol";
 import {CommitProtocolERC1155} from "./CommitProtocolERC1155.sol";
 
+// Token not approved
+error NotApproved(address token);
+
+// Sum of protocol + client shares > MAX_SHARE_BPS
+error ShareOverflow();
+
+error InvalidCommitConfig(string reason);
+
+// Commit is “closed” (e.g. join or verify period ended)
+error CommitClosed(uint256 commitId, string phase);
+
+// Participant status conflicts: already joined, not joined, etc.
+error StatusConflict(uint256 commitId, address participant, string reason);
+// e.g. reason = "already-joined", "not-joined", "not-eligible-join", "not-verified"
+
+// Hitting the commit’s max participant limit
+error LimitReached(uint256 commitId);
+
+// Attempts to distribute rewards when no participants are verified
+error NoVerified(uint256 commitId);
+
 /**
  * @title CommitProtocolV04
  * @notice Handles the creation and management of “Commits,”
@@ -108,7 +129,9 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     // ----------------- Modifiers -----------------
 
     modifier onlyApprovedToken(address token) {
-        require(approvedTokens.contains(token), "Token not approved");
+        if (!approvedTokens.contains(token)) {
+            revert NotApproved(token);
+        }
         _;
     }
 
@@ -126,16 +149,20 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         onlyApprovedToken(commit.token)
         returns (uint256)
     {
-        require(config.fee.shareBps + commit.client.shareBps <= MAX_SHARE_BPS, "Shares cannot exceed 15%");
-        require(
-            block.timestamp < commit.joinBefore && commit.joinBefore < commit.verifyBefore, "Validate timestamp error"
-        );
-        require(commit.verifyBefore - block.timestamp < config.maxCommitDuration, "Max commit duration exceeded");
+        if (config.fee.shareBps + commit.client.shareBps > MAX_SHARE_BPS) {
+            revert ShareOverflow();
+        }
+        if (block.timestamp >= commit.joinBefore || commit.joinBefore >= commit.verifyBefore) {
+            revert InvalidCommitConfig("now < joinBefore < verifyBefore required");
+        }
+        if (commit.verifyBefore - block.timestamp >= config.maxCommitDuration) {
+            revert InvalidCommitConfig("exceeds maxCommitDuration");
+        }
 
         uint256 commitId = commitIds++;
         commits[commitId] = commit;
 
-        // Charge a flat protocol creation fee (ETH)
+        // Collect the protocol creation fee in ETH
         TokenUtils.transferFrom(address(0), _msgSender(), config.fee.recipient, config.fee.fee);
 
         emit Created(commitId, commit);
@@ -148,20 +175,26 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
      */
     function join(uint256 commitId, bytes calldata data) public payable nonReentrant {
         Commit memory commit = getCommit(commitId);
-        require(block.timestamp < commit.joinBefore, "Join period ended");
-        require(participants[commitId][_msgSender()] == ParticipantStatus.init, "Already joined");
+        if (block.timestamp >= commit.joinBefore) {
+            revert CommitClosed(commitId, "join");
+        }
+        if (participants[commitId][_msgSender()] != ParticipantStatus.init) {
+            revert StatusConflict(commitId, _msgSender(), "already-joined");
+        }
+
         participants[commitId][_msgSender()] = ParticipantStatus.joined;
 
         // Enforce max participant limit if set
-        require(
-            commit.maxParticipants == 0 || totalSupply(commitId) < commit.maxParticipants,
-            "Max participants have already joined"
-        );
+        if (commit.maxParticipants != 0 && totalSupply(commitId) >= commit.maxParticipants) {
+            revert LimitReached(commitId);
+        }
 
         // Optionally verify participant’s eligibility
         if (commit.joinVerifier.target != address(0)) {
-            bool verified = IVerifier(commit.joinVerifier.target).verify(_msgSender(), commit.joinVerifier.data, data);
-            require(verified, "Not verified to join");
+            bool ok = IVerifier(commit.joinVerifier.target).verify(_msgSender(), commit.joinVerifier.data, data);
+            if (!ok) {
+                revert StatusConflict(commitId, _msgSender(), "not-eligible-join");
+            }
         }
 
         // Pay protocol join fee in ETH
@@ -192,7 +225,9 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         onlyApprovedToken(token)
     {
         Commit memory commit = getCommit(commitId);
-        require(block.timestamp < commit.verifyBefore, "Verification period ended");
+        if (block.timestamp >= commit.verifyBefore) {
+            revert CommitClosed(commitId, "verify");
+        }
 
         // Transfer tokens into the commit’s pool
         funds[token][commitId] += amount;
@@ -204,21 +239,24 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
      * @notice Anyone can call verify to confirm a participant has completed their commit.
      */
     function verify(uint256 commitId, address participant, bytes calldata data) public payable returns (bool) {
-        Commit memory commit = getCommit(commitId);
-        require(block.timestamp < commit.verifyBefore, "Verification period ended");
-        require(participants[commitId][participant] == ParticipantStatus.joined, "Already verified");
-
+        Commit memory c = getCommit(commitId);
+        if (block.timestamp >= c.verifyBefore) {
+            revert CommitClosed(commitId, "verify");
+        }
+        if (participants[commitId][participant] != ParticipantStatus.joined) {
+            revert StatusConflict(commitId, participant, "not-joined");
+        }
         // Use fulfillVerifier to check if participant truly completed the commit
-        bool verified = IVerifier(commit.fulfillVerifier.target).verify(participant, commit.fulfillVerifier.data, data);
+        bool ok = IVerifier(c.fulfillVerifier.target).verify(participant, c.fulfillVerifier.data, data);
 
         // If successful, mark them as verified
-        if (verified) {
+        if (ok) {
             participants[commitId][participant] = ParticipantStatus.verified;
         }
 
         verifiedCount[commitId]++;
-        emit Verified(commitId, participant, verified);
-        return verified;
+        emit Verified(commitId, participant, ok);
+        return ok;
     }
 
     /**
@@ -226,7 +264,9 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
      *         proportionally among verified users (minus protocol/client fees).
      */
     function claim(uint256 commitId, address participant) public payable nonReentrant {
-        require(participants[commitId][participant] == ParticipantStatus.verified, "Must be verified");
+        if (participants[commitId][participant] != ParticipantStatus.verified) {
+            revert StatusConflict(commitId, participant, "not-verified");
+        }
         participants[commitId][participant] = ParticipantStatus.claimed;
 
         // Distribute for each approved token
@@ -254,8 +294,12 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
      */
     function distribute(uint256 commitId, address token) public {
         Commit memory commit = getCommit(commitId);
-        require(block.timestamp > commit.verifyBefore, "Still verifying");
-        require(verifiedCount[commitId] > 0, "No verified participants");
+        if (block.timestamp <= commit.verifyBefore) {
+            revert CommitClosed(commitId, "verify still open");
+        }
+        if (verifiedCount[commitId] == 0) {
+            revert NoVerified(commitId);
+        }
 
         uint256 amount = funds[token][commitId];
 
