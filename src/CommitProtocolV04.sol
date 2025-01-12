@@ -163,7 +163,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         commits[commitId] = commit;
 
         // Collect the protocol creation fee in ETH
-        TokenUtils.transferFrom(address(0), _msgSender(), config.fee.recipient, config.fee.fee);
+        TokenUtils.transferFrom(address(0), msg.sender, config.fee.recipient, config.fee.fee);
 
         emit Created(commitId, commit);
         return commitId;
@@ -178,11 +178,11 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         if (block.timestamp >= commit.joinBefore) {
             revert CommitClosed(commitId, "join");
         }
-        if (participants[commitId][_msgSender()] != ParticipantStatus.init) {
-            revert StatusConflict(commitId, _msgSender(), "already-joined");
+        if (participants[commitId][msg.sender] != ParticipantStatus.init) {
+            revert StatusConflict(commitId, msg.sender, "already-joined");
         }
 
-        participants[commitId][_msgSender()] = ParticipantStatus.joined;
+        participants[commitId][msg.sender] = ParticipantStatus.joined;
 
         // Enforce max participant limit if set
         if (commit.maxParticipants != 0 && totalSupply(commitId) >= commit.maxParticipants) {
@@ -191,14 +191,14 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
         // Optionally verify participant’s eligibility
         if (commit.joinVerifier.target != address(0)) {
-            bool ok = IVerifier(commit.joinVerifier.target).verify(_msgSender(), commit.joinVerifier.data, data);
+            bool ok = IVerifier(commit.joinVerifier.target).verify(msg.sender, commit.joinVerifier.data, data);
             if (!ok) {
-                revert StatusConflict(commitId, _msgSender(), "not-eligible-join");
+                revert StatusConflict(commitId, msg.sender, "not-eligible-join");
             }
         }
 
         // Pay protocol join fee in ETH
-        TokenUtils.transferFrom(address(0), _msgSender(), config.fee.recipient, config.fee.fee);
+        TokenUtils.transferFrom(address(0), msg.sender, config.fee.recipient, config.fee.fee);
 
         // Add participant stake
         funds[commit.token][commitId] += commit.stake;
@@ -207,12 +207,12 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         claims[commit.token][commit.owner] += commit.fee;
 
         // Transfer stake + creator fee to this contract
-        TokenUtils.transferFrom(commit.token, _msgSender(), address(this), commit.stake + commit.fee);
+        TokenUtils.transferFrom(commit.token, msg.sender, address(this), commit.stake + commit.fee);
 
         // Mint an ERC1155 token representing this commit for the participant
-        _mint(_msgSender(), commitId, 1, "");
+        _mint(msg.sender, commitId, 1, "");
 
-        emit Joined(commitId, _msgSender());
+        emit Joined(commitId, msg.sender);
     }
 
     /**
@@ -231,8 +231,8 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
         // Transfer tokens into the commit’s pool
         funds[token][commitId] += amount;
-        TokenUtils.transferFrom(token, _msgSender(), address(this), amount);
-        emit Funded(commitId, _msgSender(), token, amount);
+        TokenUtils.transferFrom(token, msg.sender, address(this), amount);
+        emit Funded(commitId, msg.sender, token, amount);
     }
 
     /**
@@ -367,6 +367,6 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
      * @notice Owner-only function to withdraw tokens in emergencies (if needed).
      */
     function emergencyWithdraw(address token, uint256 amount) public onlyOwner {
-        TokenUtils.transfer(token, _msgSender(), amount);
+        TokenUtils.transfer(token, msg.sender, amount);
     }
 }
