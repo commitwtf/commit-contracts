@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
 import {IVerifier} from "../interfaces/IVerifier.sol";
 
@@ -22,7 +22,7 @@ contract EASVerifier is IVerifier {
     function verify(
         address participant,
         bytes calldata data,
-        bytes calldata userdata
+        bytes calldata
     ) external view override returns (bool) {
         (bytes32 schemaUID, address attester) = abi.decode(
             data,

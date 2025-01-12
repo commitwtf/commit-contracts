@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
 import {IVerifier} from "../interfaces/IVerifier.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -25,7 +25,7 @@ contract TokenVerifier is IVerifier {
     }
 }
 
-contract ERC1155erifier is IVerifier {
+contract ERC1155Verifier is IVerifier {
     function verify(
         address account,
         bytes calldata data,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
 interface ICommit {
     event Join(address participant, uint256 tokenId);
@@ -34,8 +34,9 @@ interface ICommit {
         uint256 fee; // Creator fee
         // Referals
         uint256 maxParticipants; // (Optional) Limit how many participants can join (this just sets the ERC721 supply)
-        Milestone[] milestones; // (Optional) Define milestones
         ClientConfig client;
+        // Note: Milestones not implemented yet
+        Milestone[] milestones; // (Optional) Define milestones
     }
     struct ClientConfig {
         address recipient;

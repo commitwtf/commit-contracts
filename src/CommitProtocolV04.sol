@@ -1,173 +1,302 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import {ERC721Pausable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Pausable.sol";
-import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-import {ICommit} from "./interfaces/ICommit.sol";
 import {TokenUtils} from "./libraries/TokenUtils.sol";
+import {IVerifier} from "./interfaces/IVerifier.sol";
+import {CommitProtocolERC1155} from "./CommitProtocolERC1155.sol";
 
-interface ICommitProtocolV04 {
-    struct ProtocolConfig {
-        uint256 share;
-        uint256 joinFee;
-        uint256 createFee;
-        uint256 maxDeadlineDuration;
-        string baseURI;
-        address feeAddress;
-    }
-
-    event ApproveToken(address token, bool isApproved);
-    event ConfigUpdated();
-
-    event CommitCreated(
-        address indexed commitAddress,
-        address indexed owner,
-        string metadataURI,
-        uint256 joinBefore,
-        uint256 verifyBefore,
-        address verifier,
-        address token,
-        uint256 stake,
-        uint256 fee,
-        uint256 maxParticipants
-    );
-
-    function getProtocolConfig() external returns (ProtocolConfig memory);
-
-    function tokenURI(
-        address commit,
-        uint256 tokenId
-    ) external view returns (string memory);
-}
-
-contract CommitProtocolV04 is
-    ICommitProtocolV04,
-    UUPSUpgradeable,
-    OwnableUpgradeable,
-    PausableUpgradeable
-{
+contract CommitProtocolV04 is CommitProtocolERC1155 {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    address public commitImplementation;
-    ProtocolConfig public protocolConfig;
+    event ApproveToken(address token, bool isApproved);
+    event Created(uint256 commitId, Commit config);
+    event Funded(
+        uint256 commitId,
+        address funder,
+        address token,
+        uint256 amount
+    );
+    event Joined(uint256 commitId, address participant);
+    event Verified(uint256 commitId, address participant, bool isVerified);
+    event Claimed(
+        uint256 commitId,
+        address participant,
+        address token,
+        uint256 amount
+    );
+
+    event Withdraw(address recipient, address token, uint256 amount);
+
+    struct ProtocolConfig {
+        uint256 maxCommitDuration;
+        string baseURI;
+        Fee protocolFee;
+    }
+
+    struct Commit {
+        address owner;
+        // Commit details
+        string metadataURI; // { title, image, description, tags } - Use a standard NFT format
+        // Commit period
+        uint256 joinBefore;
+        uint256 verifyBefore;
+        uint256 maxParticipants; // (Optional) Limit how many participants can join (this just sets the ERC721 supply)
+        // Verifiers
+        Verifier joinVerifier;
+        Verifier fulfillVerifier;
+        // Stake
+        address token;
+        uint256 stake; // Cost to join Commit
+        // Fees
+        Fee creatorFee;
+        Fee clientFee;
+    }
+    struct Verifier {
+        address target;
+        bytes data;
+    }
+    struct Fee {
+        address recipient;
+        uint256 fee;
+        uint256 shareBps;
+    }
+    enum ParticipantStatus {
+        init,
+        joined,
+        verified,
+        claimed
+    }
+
+    ProtocolConfig public config;
+
+    uint256 public commitIds;
+    mapping(uint256 => Commit) public commits;
+
+    mapping(uint256 => mapping(address => ParticipantStatus))
+        public participants;
+
+    mapping(address => mapping(address => uint256)) public claims;
+    mapping(address => mapping(uint256 => uint256)) public funds;
+    mapping(address => mapping(uint256 => uint256)) public rewards;
+
+    mapping(uint256 => uint256) public verifiedCount;
+
     EnumerableSet.AddressSet private approvedTokens;
 
     uint256[50] private __gap;
 
-    function initialize(
-        address _commitImplementation,
-        ProtocolConfig calldata _protocolConfig
-    ) public initializer {
-        __Ownable_init(_msgSender());
-        __UUPSUpgradeable_init();
-        __Pausable_init();
-        commitImplementation = _commitImplementation;
-        protocolConfig = _protocolConfig;
-    }
-
-    receive() external payable {}
-
-    fallback() external payable {}
-
-    function create(
-        ICommit.Config calldata _config
-    ) external payable whenNotPaused returns (address) {
+    modifier onlyApprovedToken(address token) {
         require(
-            _config.token == address(0) ||
-                approvedTokens.contains(_config.token),
+            token == address(0) || approvedTokens.contains(token),
             "Token not approved"
         );
-        require(
-            _config.verifyBefore - block.timestamp <=
-                protocolConfig.maxDeadlineDuration,
-            "Max deadline duration exceeded"
-        );
-        require(
-            msg.value == protocolConfig.createFee,
-            "Incorrect ETH amount for protocol fee"
-        );
 
-        TokenUtils.transfer(
+        _;
+    }
+
+    function create(
+        Commit calldata commitConfig
+    ) public payable whenNotPaused onlyApprovedToken(commitConfig.token) {
+        uint256 commitId = commitIds++;
+        commits[commitId] = commitConfig;
+
+        // Transfer protocol create fee
+        TokenUtils.transferFrom(
             address(0),
-            protocolConfig.feeAddress,
-            protocolConfig.createFee
+            _msgSender(),
+            config.protocolFee.recipient,
+            config.protocolFee.fee
         );
 
-        address commitAddress = Clones.clone(commitImplementation);
-        emit CommitCreated(
-            commitAddress,
-            _config.owner,
-            _config.metadataURI,
-            _config.joinBefore,
-            _config.verifyBefore,
-            _config.verifier,
-            _config.token,
-            _config.stake,
-            _config.fee,
-            _config.maxParticipants
-        );
-        ICommit(commitAddress).initialize(_config, address(this));
-
-        return commitAddress;
+        emit Created(commitId, commitConfig);
     }
 
-    function tokenURI(
-        address commit,
-        uint256 tokenId
-    ) public view returns (string memory) {
-        return
-            string(
-                abi.encodePacked(
-                    protocolConfig.baseURI,
-                    Strings.toHexString(uint160(commit), 20),
-                    "/",
-                    Strings.toString(tokenId)
-                )
-            );
-    }
-
-    function getApprovedTokens() public view returns (address[] memory) {
-        return approvedTokens.values();
-    }
-
-    function setApprovedToken(address token, bool approved) external onlyOwner {
-        approved ? approvedTokens.add(token) : approvedTokens.remove(token);
-        emit ApproveToken(token, approved);
-    }
-
-    function setImplementation(address _implementation) external onlyOwner {
-        require(_implementation != address(0), "Zero address");
-        commitImplementation = _implementation;
-    }
-
-    function withdraw(
+    // Anyone can fund Commits with approved tokens
+    function fund(
+        uint256 commitId,
         address token,
-        uint256 amount,
-        address _recipient
-    ) external onlyOwner {
-        TokenUtils.transfer(token, _recipient, amount);
+        uint256 amount
+    ) public payable whenNotPaused onlyApprovedToken(token) {
+        require(commitId < commitIds, "Commit not found");
+        // Add tokens to Commit funds
+        funds[token][commitId] += amount;
+        TokenUtils.transferFrom(token, _msgSender(), address(this), amount);
+        emit Funded(commitId, _msgSender(), token, amount);
     }
 
-    function setProtocolConfig(
-        ProtocolConfig calldata _config
-    ) external onlyOwner {
-        protocolConfig = _config;
-        emit ConfigUpdated();
+    // Participants can join Commits - cost is stake + fees
+    function join(
+        uint256 commitId,
+        address referral, // Transfer referral bonus from sharing link to Commit
+        bytes calldata data
+    ) public payable nonReentrant {
+        require(
+            participants[commitId][_msgSender()] == ParticipantStatus.init,
+            "Already joined"
+        );
+        participants[commitId][_msgSender()] = ParticipantStatus.joined;
+
+        Commit memory commit = getCommit(commitId);
+
+        require(
+            totalSupply(commitId) < commit.maxParticipants,
+            "Max participants have already joined"
+        );
+        require(block.timestamp < commit.joinBefore, "Join period ended");
+
+        // Check the conditions to join the Commit (ie token holdings, attestation, signature, etc)
+        if (commit.joinVerifier.target != address(0)) {
+            bool verified = IVerifier(commit.joinVerifier.target).verify(
+                _msgSender(),
+                commit.joinVerifier.data,
+                data
+            );
+            require(verified, "Not verified to join");
+        }
+
+        // Calculate total tokens to transfer from participant
+        // TODO: It would simplify to always use shareBps of commit.token
+        uint256 creatorFee = commit.creatorFee.fee;
+        uint256 clientFee = commit.clientFee.fee;
+        uint256 protocolFee = config.protocolFee.fee;
+        uint256 totalAmount = commit.stake +
+            creatorFee +
+            clientFee +
+            protocolFee;
+
+        // Add stake to Commit funds
+        funds[commit.token][commitId] += commit.stake;
+
+        // Transfer stake
+        TokenUtils.transferFrom(
+            commit.token,
+            _msgSender(),
+            address(this),
+            totalAmount
+        );
+
+        // Add fees to claimable funds
+        claims[commit.token][commit.creatorFee.recipient] += creatorFee;
+        claims[commit.token][commit.clientFee.recipient] += clientFee;
+        claims[commit.token][config.protocolFee.recipient] += protocolFee;
+
+        // Mint ERC1155 NFT
+        _mint(_msgSender(), commitId, 1, "");
+
+        emit Joined(commitId, _msgSender());
     }
 
-    function getProtocolConfig() external view returns (ProtocolConfig memory) {
-        return protocolConfig;
+    // Anyone can verify a participant - the verifier contract checks validity
+    function verify(
+        uint256 commitId,
+        address participant,
+        bytes calldata data
+    ) public payable returns (bool) {
+        require(
+            participants[commitId][participant] == ParticipantStatus.joined,
+            "Already verified"
+        );
+
+        Commit memory commit = getCommit(commitId);
+        require(
+            block.timestamp < commit.verifyBefore,
+            "Verification period ended"
+        );
+
+        // Check the conditions to claim the Commit rewards (ie token holdings, attestation, signature, etc)
+        bool verified = IVerifier(commit.fulfillVerifier.target).verify(
+            participant,
+            commit.fulfillVerifier.data,
+            data
+        );
+
+        // Mark as verified
+        if (verified) {
+            participants[commitId][participant] = ParticipantStatus.verified;
+        }
+
+        emit Verified(commitId, participant, verified);
+
+        verifiedCount[commitId]++;
+        return verified;
     }
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
+    // Verified participants can claim rewards - (funded + stake) / verifiedCount - fees
+    function claim(
+        uint256 commitId,
+        address token
+    ) public payable nonReentrant {
+        require(
+            participants[commitId][_msgSender()] == ParticipantStatus.verified,
+            "Must be verified"
+        );
+        participants[commitId][_msgSender()] = ParticipantStatus.claimed;
+
+        Commit memory commit = getCommit(commitId);
+        require(block.timestamp > commit.verifyBefore, "Still verifying");
+
+        uint256 amount = rewards[token][commitId];
+
+        // First claim attempt calculates the rewards
+        if (amount == 0) {
+            calculate(commitId, token);
+        }
+
+        TokenUtils.transfer(commit.token, _msgSender(), amount);
+        emit Claimed(commitId, _msgSender(), commit.token, amount);
+    }
+
+    // Calculates the reward for a token and Commit
+    function calculate(uint256 commitId, address token) public {
+        require(verifiedCount[commitId] > 0, "No verified participants");
+        Commit memory commit = getCommit(commitId);
+
+        uint256 amount = funds[token][commitId];
+
+        uint256 creatorShare = (amount * commit.creatorFee.shareBps) / 10000;
+        uint256 clientShare = (amount * commit.clientFee.shareBps) / 10000;
+        uint256 protocolShare = (amount * config.protocolFee.shareBps) / 10000;
+        claims[commit.token][commit.creatorFee.recipient] += creatorShare;
+        claims[commit.token][commit.clientFee.recipient] += clientShare;
+        claims[commit.token][config.protocolFee.recipient] += protocolShare;
+
+        uint256 rewardsPool = amount -
+            creatorShare -
+            clientShare -
+            protocolShare;
+
+        funds[token][commitId] = 0;
+        rewards[token][commitId] = rewardsPool / verifiedCount[commitId];
+    }
+
+    // Creators, clients, and protocol can withdraw fees
+    function withdraw(address token) public payable nonReentrant {
+        uint256 amount = claims[token][_msgSender()];
+        claims[token][_msgSender()] = 0;
+        TokenUtils.transfer(token, _msgSender(), amount);
+        emit Withdraw(_msgSender(), token, amount);
+    }
+
+    function getCommit(
+        uint256 commitId
+    ) public view returns (Commit memory commit) {
+        require(commitId < commitIds, "Commit not found");
+        return commits[commitId];
+    }
+
+    function approveToken(address token, bool isApproved) public onlyOwner {
+        isApproved ? approvedTokens.add(token) : approvedTokens.remove(token);
+        emit ApproveToken(token, isApproved);
+    }
+
+    // Set tokenURI for token metadata
+    // eg. https://commit.wtf/api/commit/{id}.json - this will dynamically generate the metadata based on token status (verified, claimed, rewards etc)
+    function setURI(string memory newuri) public onlyOwner {
+        _setURI(newuri);
+    }
+
+    function emergencyWithdraw(address token, uint256 amount) public onlyOwner {
+        TokenUtils.transfer(token, _msgSender(), amount);
+    }
 }
