@@ -25,7 +25,6 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         address token,
         uint256 amount
     );
-
     event Withdraw(address recipient, address token, uint256 amount);
 
     struct ProtocolConfig {
@@ -54,8 +53,8 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         address token;
         uint256 stake; // Cost to join Commit
         // Fees
-        uint256 fee;
-        ClientConfig client;
+        uint256 fee; // Creator fee
+        ClientConfig client; // Partners building Apps can earn shares of stakes + fundings
     }
     struct Verifier {
         address target;
@@ -77,11 +76,13 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     uint256 public commitIds;
     mapping(uint256 => Commit) public commits;
 
+    // participants[commitId][participant] = status
     mapping(uint256 => mapping(address => ParticipantStatus))
         public participants;
 
-    mapping(address => mapping(address => uint256)) public claims;
+    // Mappings for funds[token][recipient] = amount
     mapping(address => mapping(uint256 => uint256)) public funds;
+    mapping(address => mapping(address => uint256)) public claims;
     mapping(address => mapping(uint256 => uint256)) public rewards;
 
     mapping(uint256 => uint256) public verifiedCount;
