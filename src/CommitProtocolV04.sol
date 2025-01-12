@@ -15,7 +15,7 @@ import {CommitProtocolERC1155} from "./CommitProtocolERC1155.sol";
 contract CommitProtocolV04 is CommitProtocolERC1155 {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    event ApproveToken(address indexed token, bool isApproved);
+    event TokenApproved(address indexed token, bool isApproved);
     event Created(uint256 indexed commitId, Commit config);
     event Funded(uint256 indexed commitId, address indexed funder, address indexed token, uint256 amount);
     event Joined(uint256 indexed commitId, address indexed participant);
@@ -280,6 +280,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         }
 
         uint256 amount = funds[token][commitId];
+        funds[token][commitId] = 0;
 
         // Allocate shares to client and protocol
         uint256 clientShare = (amount * commit.client.shareBps) / 10000;
@@ -288,7 +289,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         // The remainder is split equally among verified participants
         uint256 rewardsPool = amount - clientShare - protocolShare;
 
-        funds[token][commitId] = 0;
+        // Update rewards to claim for each verified participant
         rewards[token][commitId] = rewardsPool / verifiedCount[commitId];
 
         // Add any rounding remainder to protocol
@@ -322,7 +323,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
      */
     function approveToken(address token, bool isApproved) public onlyOwner {
         isApproved ? approvedTokens.add(token) : approvedTokens.remove(token);
-        emit ApproveToken(token, isApproved);
+        emit TokenApproved(token, isApproved);
     }
 
     /**
