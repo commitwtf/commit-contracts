@@ -252,9 +252,9 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         // If successful, mark them as verified
         if (ok) {
             participants[commitId][participant] = ParticipantStatus.verified;
+            verifiedCount[commitId]++;
         }
 
-        verifiedCount[commitId]++;
         emit Verified(commitId, participant, ok);
         return ok;
     }
@@ -307,13 +307,18 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         uint256 clientShare = (amount * commit.client.shareBps) / 10000;
         uint256 protocolShare = (amount * config.fee.shareBps) / 10000;
 
-        claims[token][commit.client.recipient] += clientShare;
-        claims[token][config.fee.recipient] += protocolShare;
-
         // The remainder is split equally among verified participants
         uint256 rewardsPool = amount - clientShare - protocolShare;
+
         funds[token][commitId] = 0;
         rewards[token][commitId] = rewardsPool / verifiedCount[commitId];
+
+        // Add any rounding remainder to protocol
+        protocolShare += rewardsPool % verifiedCount[commitId];
+
+        // Update claims
+        claims[token][commit.client.recipient] += clientShare;
+        claims[token][config.fee.recipient] += protocolShare;
     }
 
     /**
