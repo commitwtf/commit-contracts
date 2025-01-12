@@ -6,27 +6,6 @@ import {TokenUtils} from "./libraries/TokenUtils.sol";
 import {IVerifier} from "./interfaces/IVerifier.sol";
 import {CommitProtocolERC1155} from "./CommitProtocolERC1155.sol";
 
-// Token not approved
-error NotApproved(address token);
-
-// Sum of protocol + client shares > MAX_SHARE_BPS
-error ShareOverflow();
-
-error InvalidCommitConfig(string reason);
-
-// Commit is “closed” (e.g. join or verify period ended)
-error CommitClosed(uint256 commitId, string phase);
-
-// Participant status conflicts: already joined, not joined, etc.
-error StatusConflict(uint256 commitId, address participant, string reason);
-// e.g. reason = "already-joined", "not-joined", "not-eligible-join", "not-verified"
-
-// Hitting the commit’s max participant limit
-error LimitReached(uint256 commitId);
-
-// Attempts to distribute rewards when no participants are verified
-error NoVerified(uint256 commitId);
-
 /**
  * @title CommitProtocolV04
  * @notice Handles the creation and management of “Commits,”
@@ -36,7 +15,6 @@ error NoVerified(uint256 commitId);
 contract CommitProtocolV04 is CommitProtocolERC1155 {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    // ----------------- Events -----------------
     event ApproveToken(address indexed token, bool isApproved);
     event Created(uint256 indexed commitId, Commit config);
     event Funded(uint256 indexed commitId, address indexed funder, address indexed token, uint256 amount);
@@ -44,7 +22,14 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     event Verified(uint256 indexed commitId, address indexed participant, bool isVerified);
     event Claimed(uint256 indexed commitId, address indexed participant, address indexed token, uint256 amount);
     event Withdraw(address indexed recipient, address indexed token, uint256 amount);
-    // ----------------- Structs -----------------
+
+    error TokenNotApproved(address token);
+    error MaxShareReached();
+    error InvalidCommitConfig(string reason);
+    error CommitClosed(uint256 commitId, string phase);
+    error StatusConflict(uint256 commitId, address participant, string reason);
+    error MaxParticipantsReached(uint256 commitId);
+    error NoVerified(uint256 commitId);
 
     struct ProtocolConfig {
         uint256 maxCommitDuration; // Maximum allowable duration from join to verify
@@ -90,8 +75,6 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
     }
 
-    // ----------------- State Variables -----------------
-
     // Protocol-wide configuration
     ProtocolConfig public config;
 
@@ -125,16 +108,12 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     // Storage gap for future upgrades
     uint256[50] private __gap;
 
-    // ----------------- Modifiers -----------------
-
     modifier onlyApprovedToken(address token) {
         if (!approvedTokens.contains(token)) {
-            revert NotApproved(token);
+            revert TokenNotApproved(token);
         }
         _;
     }
-
-    // ----------------- Functions -----------------
 
     /**
      * @notice Creates a new Commit, requiring a protocol fee in ETH.
@@ -149,7 +128,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         returns (uint256)
     {
         if (config.fee.shareBps + commit.client.shareBps > MAX_SHARE_BPS) {
-            revert ShareOverflow();
+            revert MaxShareReached();
         }
         if (block.timestamp >= commit.joinBefore || commit.joinBefore >= commit.verifyBefore) {
             revert InvalidCommitConfig("now < joinBefore < verifyBefore required");
@@ -185,7 +164,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
         // Enforce max participant limit if set
         if (commit.maxParticipants != 0 && totalSupply(commitId) >= commit.maxParticipants) {
-            revert LimitReached(commitId);
+            revert MaxParticipantsReached(commitId);
         }
 
         // Optionally verify participant’s eligibility
