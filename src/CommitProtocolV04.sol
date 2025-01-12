@@ -244,7 +244,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
             calculate(commitId, token);
         }
 
-        TokenUtils.transfer(commit.token, _msgSender(), amount);
+        TokenUtils.transfer(token, _msgSender(), amount);
         emit Claimed(commitId, _msgSender(), commit.token, amount);
     }
 
@@ -258,8 +258,8 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         // Set aside Protocol + Creator + Client fees
         uint256 clientShare = (amount * commit.client.shareBps) / 10000;
         uint256 protocolShare = (amount * config.fee.shareBps) / 10000;
-        claims[commit.token][commit.client.recipient] += clientShare;
-        claims[commit.token][config.fee.recipient] += protocolShare;
+        claims[token][commit.client.recipient] += clientShare;
+        claims[token][config.fee.recipient] += protocolShare;
 
         uint256 rewardsPool = amount - clientShare - protocolShare;
 
