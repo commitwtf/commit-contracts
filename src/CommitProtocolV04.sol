@@ -325,7 +325,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         if (msg.sender != commit.owner) {
             revert InvalidCommitOwner(commitId);
         }
-        if (block.timestamp >= c.joinBefore) {
+        if (block.timestamp >= commit.joinBefore) {
             revert CommitClosed(commitId, "join");
         }
 
@@ -333,7 +333,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     }
 
     // Participants can claim refund of cancelled commits
-    function refund(uint256 commitId) public nonReentrant {
+    function refund(uint256 commitId, address participant) public nonReentrant {
         Commit memory commit = getCommit(commitId);
         if (status[commitId] != CommitStatus.cancelled) {
             revert InvalidCommitStatus(commitId, "not-cancelled");
