@@ -110,6 +110,9 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     // Whitelist of tokens allowed for staking/funding
     EnumerableSet.AddressSet private approvedTokens;
 
+    // Tokens used for each commit
+    mapping(uint256 => EnumerableSet.AddressSet) private commitTokens;
+
     // Max share for protocol + client combined (15%)
     uint256 public immutable MAX_SHARE_BPS = 1500;
 
@@ -147,6 +150,8 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
         uint256 commitId = commitIds++;
         commits[commitId] = commit;
+
+        commitTokens[commitId].add(commit.token);
 
         // Collect the protocol creation fee in ETH
         TokenUtils.transferFrom(address(0), msg.sender, config.fee.recipient, config.fee.fee);
@@ -215,6 +220,8 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
             revert CommitClosed(commitId, "verify");
         }
 
+        commitTokens[commitId].add(token);
+
         // Transfer tokens into the commit’s pool
         funds[token][commitId] += amount;
         TokenUtils.transferFrom(token, msg.sender, address(this), amount);
@@ -255,10 +262,10 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         }
         participants[commitId][participant] = ParticipantStatus.claimed;
 
-        // Distribute for each approved token
-        uint256 length = approvedTokens.length();
+        // Distribute for each approved token used by the commit
+        uint256 length = commitTokens[commitId].length();
         for (uint256 i = 0; i < length; i++) {
-            address token = approvedTokens.at(i);
+            address token = commitTokens[commitId].at(i);
 
             // Calculate distribution if not done already
             if (rewards[token][commitId] == 0) {
