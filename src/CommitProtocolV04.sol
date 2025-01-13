@@ -27,9 +27,11 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     error MaxShareReached();
     error InvalidCommitConfig(string reason);
     error CommitClosed(uint256 commitId, string phase);
-    error StatusConflict(uint256 commitId, address participant, string reason);
+    error InvalidCommitStatus(uint256 commitId, string reason);
+    error InvalidParticipantStatus(uint256 commitId, address participant, string reason);
     error MaxParticipantsReached(uint256 commitId);
     error NoVerified(uint256 commitId);
+    error InvalidCommitOwner(uint256 commitId);
 
     struct ProtocolConfig {
         uint256 maxCommitDuration; // Maximum allowable duration from join to verify
@@ -67,6 +69,11 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         uint256 shareBps; // Percentage share the client receives
     }
 
+    enum CommitStatus {
+        created,
+        cancelled
+    }
+
     enum ParticipantStatus {
         init, // Participant has not joined
         joined, // Participant has staked and joined
@@ -86,6 +93,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
     // commitId => (participant => status)
     mapping(uint256 => mapping(address => ParticipantStatus)) public participants;
+    mapping(uint256 => CommitStatus) public status;
 
     // token => (commitId => total staked + funded)
     mapping(address => mapping(uint256 => uint256)) public funds;
@@ -157,7 +165,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
             revert CommitClosed(commitId, "join");
         }
         if (participants[commitId][msg.sender] != ParticipantStatus.init) {
-            revert StatusConflict(commitId, msg.sender, "already-joined");
+            revert InvalidParticipantStatus(commitId, msg.sender, "already-joined");
         }
 
         participants[commitId][msg.sender] = ParticipantStatus.joined;
@@ -171,7 +179,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         if (commit.joinVerifier.target != address(0)) {
             bool ok = IVerifier(commit.joinVerifier.target).verify(msg.sender, commit.joinVerifier.data, data);
             if (!ok) {
-                revert StatusConflict(commitId, msg.sender, "not-eligible-join");
+                revert InvalidParticipantStatus(commitId, msg.sender, "not-eligible-join");
             }
         }
 
@@ -222,7 +230,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
             revert CommitClosed(commitId, "verify");
         }
         if (participants[commitId][participant] != ParticipantStatus.joined) {
-            revert StatusConflict(commitId, participant, "not-joined");
+            revert InvalidParticipantStatus(commitId, participant, "not-joined");
         }
         // Use fulfillVerifier to check if participant truly completed the commit
         bool ok = IVerifier(c.fulfillVerifier.target).verify(participant, c.fulfillVerifier.data, data);
@@ -243,7 +251,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
      */
     function claim(uint256 commitId, address participant) public payable nonReentrant {
         if (participants[commitId][participant] != ParticipantStatus.verified) {
-            revert StatusConflict(commitId, participant, "not-verified");
+            revert InvalidParticipantStatus(commitId, participant, "not-verified");
         }
         participants[commitId][participant] = ParticipantStatus.claimed;
 
@@ -309,6 +317,33 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         claims[token][account] = 0;
         TokenUtils.transfer(token, account, amount);
         emit Withdraw(account, token, amount);
+    }
+
+    // Commit owner can cancel the commit
+    function cancel(uint256 commitId) public {
+        Commit memory commit = getCommit(commitId);
+        if (msg.sender != commit.owner) {
+            revert InvalidCommitOwner(commitId);
+        }
+        if (block.timestamp >= c.joinBefore) {
+            revert CommitClosed(commitId, "join");
+        }
+
+        status[commitId] = CommitStatus.cancelled;
+    }
+
+    // Participants can claim refund of cancelled commits
+    function refund(uint256 commitId) public nonReentrant {
+        Commit memory commit = getCommit(commitId);
+        if (status[commitId] != CommitStatus.cancelled) {
+            revert InvalidCommitStatus(commitId, "not-cancelled");
+        }
+        if (participants[commitId][participant] != ParticipantStatus.joined) {
+            revert InvalidParticipantStatus(commitId, participant, "not-joined");
+        }
+        // Transfer both stake and creator fee to participant
+        claims[commit.token][commit.owner] -= commit.fee;
+        TokenUtils.transfer(commit.token, msg.sender, commit.stake + commit.fee);
     }
 
     /**
