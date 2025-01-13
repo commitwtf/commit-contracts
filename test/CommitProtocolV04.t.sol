@@ -21,34 +21,34 @@ contract CommitProtocolV04Test is Test {
     address internal owner = address(0xABCD);
     address internal alice = address(0x1111);
     address internal bob = address(0x2222);
+    address internal protocolFeeRecipient = address(0x3333);
 
     // Example: protocol config
-    CommitProtocolV04.ProtocolConfig internal protoCfg;
+    CommitProtocolV04.ProtocolConfig internal config;
 
     // We'll store a created commitId for tests
     uint256 internal createdCommitId;
 
     function setUp() public {
         // 1. Deploy the protocol contract as an upgradeable base (UUPS).
-        //    We call initialize(...) from the inherited ERC1155 contract constructor.
         vm.startPrank(owner);
         commitProtocol = new CommitProtocolV04();
-        commitProtocol.initialize(owner); // from CommitProtocolERC1155 base
+        commitProtocol.initialize(owner);
 
         verifier = new MockVerifier();
         // 2. Configure protocol fees
-        protoCfg = CommitProtocolV04.ProtocolConfig({
+        config = CommitProtocolV04.ProtocolConfig({
             maxCommitDuration: 30 days,
             baseURI: "https://example.com/",
             fee: CommitProtocolV04.ProtocolFee({
-                recipient: address(0xFEE),
+                recipient: protocolFeeRecipient,
                 fee: 0.01 ether, // protocol creation/join fee in ETH
                 shareBps: 500 // 5%
             })
         });
 
         // Store the config in the contract
-        commitProtocol.setProtocolConfig(protoCfg);
+        commitProtocol.setProtocolConfig(config);
 
         // 3. Deploy and mint mock tokens
         stakeToken = new ERC20Mock();
@@ -75,28 +75,13 @@ contract CommitProtocolV04Test is Test {
         vm.deal(alice, 1 ether); // give Alice some ETH to pay for creation
 
         // Build Commit details
-        CommitProtocolV04.Commit memory newCommit = CommitProtocolV04.Commit({
-            owner: alice,
-            metadataURI: "ipfs://commitMetadata",
-            joinBefore: block.timestamp + 1 days,
-            verifyBefore: block.timestamp + 2 days,
-            maxParticipants: 2,
-            joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-            fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-            token: address(stakeToken),
-            stake: 10 ether,
-            fee: 2 ether,
-            client: CommitProtocolV04.ClientConfig({
-                recipient: address(0xBEEF),
-                shareBps: 900 // 9%
-            })
-        });
+        CommitProtocolV04.Commit memory newCommit = createCommit();
 
         // Create commit
         uint256 commitId = commitProtocol.create{value: 0.01 ether}(newCommit);
         createdCommitId = commitId; // store for other tests
         // Check that commitId increments
-        assertEq(commitId, 0, "First commit should have ID 0");
+        assertEq(commitId, 1, "First commit should have ID 1");
         assertEq(commitProtocol.commitIds(), 1, "commitIds should be 1 after creation");
 
         // Verify the commit data is stored properly
@@ -105,6 +90,9 @@ contract CommitProtocolV04Test is Test {
         assertEq(stored.maxParticipants, 2, "Max participants mismatch");
         assertEq(stored.token, address(stakeToken), "Token mismatch");
 
+        // Create fee should be transferred to protocol fee recipient
+        assertEq(address(protocolFeeRecipient).balance, 0.01 ether, "Create fee transfer mismatch");
+
         vm.stopPrank();
     }
 
@@ -112,21 +100,7 @@ contract CommitProtocolV04Test is Test {
         // First create the commit as Alice
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(
-            CommitProtocolV04.Commit({
-                owner: alice,
-                metadataURI: "ipfs://commitMetadata",
-                joinBefore: block.timestamp + 1 days,
-                verifyBefore: block.timestamp + 2 days,
-                maxParticipants: 2,
-                joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-                fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-                token: address(stakeToken),
-                stake: 10 ether,
-                fee: 2 ether,
-                client: CommitProtocolV04.ClientConfig({recipient: address(0xBEEF), shareBps: 900})
-            })
-        );
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
         vm.stopPrank();
 
         // Bob joins the commit
@@ -136,6 +110,9 @@ contract CommitProtocolV04Test is Test {
         // Must pay protocol fee of 0.01 ETH to join
         vm.deal(bob, 1 ether);
         commitProtocol.join{value: 0.01 ether}(commitId, "");
+
+        // Join fee should be transferred to protocol fee recipient
+        assertEq(address(protocolFeeRecipient).balance, 0.02 ether, "Join fee transfer mismatch");
 
         // Check Bob's participant status
         CommitProtocolV04.ParticipantStatus status = commitProtocol.participants(commitId, bob);
@@ -149,6 +126,9 @@ contract CommitProtocolV04Test is Test {
 
         uint256 creatorClaim = commitProtocol.claims(address(stakeToken), alice);
         assertEq(creatorClaim, 2 ether, "Creator fee not recorded properly");
+
+        // NFT should be minted
+        assertEq(commitProtocol.balanceOf(bob, 1), 1, "Token count mismatch");
         vm.stopPrank();
     }
 
@@ -158,24 +138,7 @@ contract CommitProtocolV04Test is Test {
         {
             vm.startPrank(alice);
             vm.deal(alice, 1 ether);
-            commitId = commitProtocol.create{value: 0.01 ether}(
-                CommitProtocolV04.Commit({
-                    owner: alice,
-                    metadataURI: "ipfs://commitMetadata",
-                    joinBefore: block.timestamp + 1 days,
-                    verifyBefore: block.timestamp + 2 days,
-                    maxParticipants: 0, // no limit
-                    joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-                    fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-                    token: address(stakeToken),
-                    stake: 20 ether,
-                    fee: 5 ether,
-                    client: CommitProtocolV04.ClientConfig({
-                        recipient: address(0xBEEF),
-                        shareBps: 500 // 5%
-                    })
-                })
-            );
+            commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
             vm.stopPrank();
 
             vm.startPrank(bob);
@@ -192,7 +155,6 @@ contract CommitProtocolV04Test is Test {
         bool verified = commitProtocol.verify(commitId, bob, "");
         assertTrue(verified, "Verification unexpectedly failed");
         vm.stopPrank();
-
         // 4. Warp past verifyBefore so claim is allowed
         vm.warp(block.timestamp + 1 days + 1);
 
@@ -203,38 +165,24 @@ contract CommitProtocolV04Test is Test {
         uint256 bobBalanceAfter = stakeToken.balanceOf(bob);
         vm.stopPrank();
 
-        // Bob staked 20, plus 0 additional funding, total pot = 20 + any leftover
+        // Bob staked 10, plus 0 additional funding, total pot = 10 + any leftover
         // minus fees for protocol & client
         // Protocol shareBps = 5%
         // Client shareBps   = 5%
-        // total 10% fee => Bob should get ~90% of 20 = 18
+        // total 10% fee => Bob should get ~90% of 10 = 9
         // plus we must not forget Bob also paid the creator fee (5 ether)
         // but that was assigned to Alice's claims immediately.
 
-        // We'll do a simple assertion that Bob's new balance is at least 18 more
+        // We'll do a simple assertion that Bob's new balance is at least 9 more
         // than before, ignoring small edge cases.
-        assertApproxEqRel(bobBalanceAfter - bobBalanceBefore, 18 ether, 1e16, "Bob's staked return not as expected");
+        assertApproxEqRel(bobBalanceAfter - bobBalanceBefore, 9 ether, 1e16, "Bob's staked return not as expected");
     }
 
     function testFundAndClaimMultipleTokens() public {
         // 1. Create commit
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(
-            CommitProtocolV04.Commit({
-                owner: alice,
-                metadataURI: "ipfs://commitMetadata",
-                joinBefore: block.timestamp + 1 days,
-                verifyBefore: block.timestamp + 2 days,
-                maxParticipants: 0,
-                joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-                fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-                token: address(stakeToken),
-                stake: 10 ether,
-                fee: 2 ether,
-                client: CommitProtocolV04.ClientConfig({recipient: address(0xBEEF), shareBps: 500})
-            })
-        );
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
         vm.stopPrank();
 
         // 2. Bob joins
@@ -288,27 +236,12 @@ contract CommitProtocolV04Test is Test {
         // 1. Create & join quickly
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        commitProtocol.create{value: 0.01 ether}(
-            CommitProtocolV04.Commit({
-                owner: alice,
-                metadataURI: "ipfs://commitMetadata",
-                joinBefore: block.timestamp + 1 days,
-                verifyBefore: block.timestamp + 2 days,
-                maxParticipants: 0,
-                joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-                fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-                token: address(stakeToken),
-                stake: 10 ether,
-                fee: 2 ether,
-                client: CommitProtocolV04.ClientConfig({recipient: address(0xBEEF), shareBps: 500})
-            })
-        );
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
         vm.stopPrank();
-
         vm.startPrank(bob);
         stakeToken.approve(address(commitProtocol), type(uint256).max);
         vm.deal(bob, 1 ether);
-        commitProtocol.join{value: 0.01 ether}(0, "");
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
         vm.stopPrank();
 
         // 2. Check that Alice (creator) has 2 ether claim in the contract
@@ -324,5 +257,24 @@ contract CommitProtocolV04Test is Test {
 
         assertEq(commitProtocol.claims(address(stakeToken), alice), 0, "Claim not cleared");
         assertEq(aliceBalAfter - aliceBalBefore, 2 ether, "Incorrect withdrawal amount");
+    }
+
+    function createCommit() public returns (CommitProtocolV04.Commit memory) {
+        return CommitProtocolV04.Commit({
+            owner: alice,
+            metadataURI: "ipfs://commitMetadata",
+            joinBefore: block.timestamp + 1 days,
+            verifyBefore: block.timestamp + 2 days,
+            maxParticipants: 2,
+            joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
+            fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
+            token: address(stakeToken),
+            stake: 10 ether,
+            fee: 2 ether,
+            client: CommitProtocolV04.ClientConfig({
+                recipient: address(0xBEEF),
+                shareBps: 500 // 5%
+            })
+        });
     }
 }

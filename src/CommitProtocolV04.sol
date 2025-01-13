@@ -367,7 +367,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
      * @notice Returns the details of a specific commit by ID.
      */
     function getCommit(uint256 commitId) public view returns (Commit memory commit) {
-        require(commitId < commitIds, "Commit not found");
+        require(commitId <= commitIds, "Commit not found");
         return commits[commitId];
     }
 
