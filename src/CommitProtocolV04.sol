@@ -148,7 +148,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
             revert InvalidCommitConfig("exceeds maxCommitDuration");
         }
 
-        uint256 commitId = commitIds++;
+        uint256 commitId = ++commitIds;
         commits[commitId] = commit;
 
         commitTokens[commitId].add(commit.token);
