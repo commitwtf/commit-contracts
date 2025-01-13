@@ -257,11 +257,11 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
                 distribute(commitId, token);
             }
 
-            uint256 amount = rewards[token][commitId];
+            uint256 reward = rewards[token][commitId];
             // Transfer reward to participant
-            if (amount > 0) {
-                TokenUtils.transfer(token, participant, amount);
-                emit Claimed(commitId, participant, token, amount);
+            if (reward > 0) {
+                TokenUtils.transfer(token, participant, reward);
+                emit Claimed(commitId, participant, token, reward);
             }
         }
     }
@@ -279,6 +279,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
             revert NoVerified(commitId);
         }
 
+        // Stake + funding
         uint256 amount = funds[token][commitId];
         funds[token][commitId] = 0;
 
