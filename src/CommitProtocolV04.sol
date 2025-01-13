@@ -346,6 +346,14 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         TokenUtils.transfer(commit.token, msg.sender, commit.stake + commit.fee);
     }
 
+    function verifyOverride(uint256 commitId, address participant) public onlyOwner {
+        if (participants[commitId][participant] == ParticipantStatus.verified) {
+            revert InvalidParticipantStatus(commitId, participant, "already-verified");
+        }
+        participants[commitId][participant] = ParticipantStatus.verified;
+        verifiedCount[commitId]++;
+    }
+
     /**
      * @notice Returns the details of a specific commit by ID.
      */
