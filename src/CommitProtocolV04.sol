@@ -91,9 +91,11 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     // commitId => Commit data
     mapping(uint256 => Commit) public commits;
 
+    // commitId => Commit status
+    mapping(uint256 => CommitStatus) public status;
+
     // commitId => (participant => status)
     mapping(uint256 => mapping(address => ParticipantStatus)) public participants;
-    mapping(uint256 => CommitStatus) public status;
 
     // token => (commitId => total staked + funded)
     mapping(address => mapping(uint256 => uint256)) public funds;
@@ -110,7 +112,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     // Whitelist of tokens allowed for staking/funding
     EnumerableSet.AddressSet private approvedTokens;
 
-    // Tokens used for each commit
+    // commitId => TokenSet for each commit
     mapping(uint256 => EnumerableSet.AddressSet) private commitTokens;
 
     // Max share for protocol + client combined (15%)
