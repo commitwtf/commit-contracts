@@ -8,7 +8,6 @@ import {SignatureVerifier} from "../src/verifiers/SignatureVerifier.sol";
 import {TokenUtils} from "../src/libraries/TokenUtils.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IVerifier} from "../src/interfaces/IVerifier.sol";
-import {ICommit} from "../src/interfaces/ICommit.sol";
 import {ERC20Mock} from "../src/mocks/ERC20Mock.sol";
 import {MockVerifier} from "../src/mocks/VerifierMock.sol";
 
