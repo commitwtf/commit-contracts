@@ -9,7 +9,7 @@ import {ERC1155SupplyUpgradeable} from
 import {ERC1155PausableUpgradeable} from
     "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155PausableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
@@ -20,7 +20,7 @@ contract CommitProtocolERC1155 is
     ERC1155PausableUpgradeable,
     ERC1155BurnableUpgradeable,
     UUPSUpgradeable,
-    ReentrancyGuard,
+    ReentrancyGuardUpgradeable,
     ERC1155SupplyUpgradeable
 {
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -35,6 +35,7 @@ contract CommitProtocolERC1155 is
         __ERC1155Pausable_init();
         __ERC1155Burnable_init();
         __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
     }
 
     function pause() public onlyOwner {
