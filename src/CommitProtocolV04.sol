@@ -22,6 +22,8 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     event Verified(uint256 indexed commitId, address indexed participant, bool isVerified);
     event Claimed(uint256 indexed commitId, address indexed participant, address indexed token, uint256 amount);
     event Withdraw(address indexed recipient, address indexed token, uint256 amount);
+    event Cancelled(uint256 indexed commitId);
+    event Refunded(uint256 indexed commitId, address indexed participant, address indexed token, uint256 amount);
 
     error TokenNotApproved(address token);
     error MaxShareReached();
@@ -339,6 +341,8 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         }
 
         status[commitId] = CommitStatus.cancelled;
+
+        emit Cancelled(commitId);
     }
 
     // Participants can claim refund of cancelled commits
@@ -353,6 +357,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         // Transfer both stake and creator fee to participant
         claims[commit.token][commit.owner] -= commit.fee;
         TokenUtils.transfer(commit.token, msg.sender, commit.stake + commit.fee);
+        emit Refunded(commitId, participant, commit.token, commit.stake + commit.fee);
     }
 
     function verifyOverride(uint256 commitId, address participant) public onlyOwner {
