@@ -19,8 +19,8 @@ contract SignatureVerifier is IVerifier {
         returns (bool)
     {
         address signer = abi.decode(data, (address));
-        (bytes32 hash, uint256 timestamp, address commitId, bytes memory signature) =
-            abi.decode(userdata, (bytes32, uint256, address, bytes));
+        (bytes32 hash, uint256 timestamp, uint256 commitId, bytes memory signature) =
+            abi.decode(userdata, (bytes32, uint256, uint256, bytes));
 
         // Ensure the signature hasn't expired
         require(block.timestamp <= timestamp + SIGNATURE_EXPIRY, "Signature expired");
