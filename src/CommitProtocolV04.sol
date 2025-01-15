@@ -357,10 +357,10 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
         if (participants[commitId][participant] != ParticipantStatus.joined) {
             revert InvalidParticipantStatus(commitId, participant, "not-joined");
         }
-        // Transfer both stake and creator fee to participant
-        claims[commit.token][commit.owner] -= commit.fee;
-        TokenUtils.transfer(commit.token, msg.sender, commit.stake + commit.fee);
-        emit Refunded(commitId, participant, commit.token, commit.stake + commit.fee);
+        // Transfer stake amount to participant
+        funds[commit.token][commitId] -= commit.stake;
+        TokenUtils.transfer(commit.token, msg.sender, commit.stake);
+        emit Refunded(commitId, participant, commit.token, commit.stake);
     }
 
     function verifyOverride(uint256 commitId, address participant) public onlyOwner {
