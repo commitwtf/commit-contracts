@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Test, console} from "forge-std/Test.sol";
-import "forge-std/console2.sol";
+import {Test} from "forge-std/Test.sol";
 import {CommitProtocolV04} from "../src/CommitProtocolV04.sol";
 import {SignatureVerifier} from "../src/verifiers/SignatureVerifier.sol";
 import {TokenUtils} from "../src/libraries/TokenUtils.sol";
@@ -11,17 +10,17 @@ import {IVerifier} from "../src/interfaces/IVerifier.sol";
 import {ERC20Mock} from "../src/mocks/ERC20Mock.sol";
 import {MockVerifier} from "../src/mocks/VerifierMock.sol";
 
-// Example Foundry test
 contract CommitProtocolV04Test is Test {
     CommitProtocolV04 internal commitProtocol;
     MockVerifier internal verifier;
     ERC20Mock internal stakeToken;
     ERC20Mock internal altToken;
 
-    address internal owner = address(0xABCD);
+    address internal protocolOwner = address(0xABCD);
     address internal alice = address(0x1111);
     address internal bob = address(0x2222);
     address internal protocolFeeRecipient = address(0x3333);
+    address internal client = address(0xBEEF);
 
     // Example: protocol config
     CommitProtocolV04.ProtocolConfig internal config;
@@ -31,9 +30,9 @@ contract CommitProtocolV04Test is Test {
 
     function setUp() public {
         // 1. Deploy the protocol contract as an upgradeable base (UUPS).
-        vm.startPrank(owner);
+        vm.startPrank(protocolOwner);
         commitProtocol = new CommitProtocolV04();
-        commitProtocol.initialize(owner);
+        commitProtocol.initialize(protocolOwner);
 
         verifier = new MockVerifier();
         // 2. Configure protocol fees
@@ -276,5 +275,361 @@ contract CommitProtocolV04Test is Test {
                 shareBps: 500 // 5%
             })
         });
+    }
+
+    function testCancelAndRefund() public {
+        // 1. Setup: Create and join commit
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // Record balances before cancel
+        uint256 bobBalanceBefore = stakeToken.balanceOf(bob);
+
+        // 2. Creator (alice) triggers cancel
+        vm.startPrank(alice);
+        commitProtocol.cancel(commitId);
+        
+        // Check status changed
+        CommitProtocolV04.CommitStatus commitStatus = commitProtocol.status(commitId);
+        assertEq(uint256(commitStatus), uint256(CommitProtocolV04.CommitStatus.cancelled));
+        vm.stopPrank();
+
+        // 3. Bob requests refund
+        vm.startPrank(bob);
+        commitProtocol.refund(commitId, bob);
+        vm.stopPrank();
+
+        // 4. Verify refund amounts
+        uint256 bobBalanceAfter = stakeToken.balanceOf(bob);
+        assertEq(bobBalanceAfter - bobBalanceBefore, 10 ether, "Incorrect refund amount");
+    }
+
+    function testAccessControl() public {
+        // Test unauthorized cancel
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        vm.stopPrank();
+        
+        vm.startPrank(bob);
+        vm.expectRevert(abi.encodeWithSignature("InvalidCommitOwner(uint256)", commitId));
+        commitProtocol.cancel(commitId);
+        vm.stopPrank();
+
+        // Test unauthorized protocol config update
+        vm.startPrank(bob);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", bob));
+        commitProtocol.setProtocolConfig(config);
+        vm.stopPrank();
+    }
+
+    function testFailedVerification() public {
+        // 1. Setup commit and participant
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // 2. Deploy a failing verifier
+        vm.startPrank(protocolOwner);
+        FailingMockVerifier failingVerifier = new FailingMockVerifier();
+        
+        // Update commit to use failing verifier
+        CommitProtocolV04.Commit memory commit = commitProtocol.getCommit(commitId);
+        commit.fulfillVerifier.target = address(failingVerifier);
+        vm.stopPrank();
+
+        // 3. Attempt verification
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.startPrank(alice);
+        bool verified = commitProtocol.verify(commitId, bob, "");
+        assertFalse(verified, "Verification should have failed");
+
+        // 4. Check participant status remains unchanged
+        CommitProtocolV04.ParticipantStatus status = commitProtocol.participants(commitId, bob);
+        assertEq(uint256(status), uint256(CommitProtocolV04.ParticipantStatus.joined));
+        vm.stopPrank();
+    }
+
+    function testClientFeeDistribution() public {
+        uint256 clientBalanceBefore = stakeToken.balanceOf(client);
+
+        // 1. Create and join commit
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // 2. Complete the commitment flow
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.startPrank(alice);
+        commitProtocol.verify(commitId, bob, "");
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.startPrank(bob);
+        commitProtocol.claim(commitId, bob);
+        vm.stopPrank();
+
+        // 3. Client withdraws their fee share
+        vm.startPrank(client);
+        commitProtocol.withdraw(address(stakeToken), client);
+        vm.stopPrank();
+
+        // 4. Check client received their fee share
+        uint256 clientBalanceAfter = stakeToken.balanceOf(client);
+        assertTrue(clientBalanceAfter > clientBalanceBefore, "Client did not receive fee share");
+        
+        // Client gets 5% of the stake amount (10 ether)
+        uint256 expectedClientFee = (10 ether * 500) / 10000; // 500 bps = 5%
+        assertEq(clientBalanceAfter - clientBalanceBefore, expectedClientFee, "Incorrect client fee amount");
+    }
+
+    function testTokenApprovalAndRemoval() public {
+        address newToken = address(new ERC20Mock());
+        
+        // Test token approval
+        vm.startPrank(protocolOwner);
+        commitProtocol.approveToken(newToken, true);
+        address[] memory approvedTokens = commitProtocol.getApprovedTokens();
+        bool isApproved = false;
+        for(uint i = 0; i < approvedTokens.length; i++) {
+            if(approvedTokens[i] == newToken) {
+                isApproved = true;
+                break;
+            }
+        }
+        assertTrue(isApproved, "Token not approved");
+
+        // Test token removal
+        commitProtocol.approveToken(newToken, false);
+        approvedTokens = commitProtocol.getApprovedTokens();
+        isApproved = false;
+        for(uint i = 0; i < approvedTokens.length; i++) {
+            if(approvedTokens[i] == newToken) {
+                isApproved = true;
+                break;
+            }
+        }
+        assertFalse(isApproved, "Token not removed");
+
+        // Test creating commit with unapproved token
+        vm.stopPrank();
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        CommitProtocolV04.Commit memory invalidCommit = createCommit();
+        invalidCommit.token = newToken;
+        
+        vm.expectRevert(abi.encodeWithSignature("TokenNotApproved(address)", newToken));
+        commitProtocol.create{value: 0.01 ether}(invalidCommit);
+        vm.stopPrank();
+    }
+
+    function testStatusTransitions() public {
+        // 1. Create commit
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        
+        CommitProtocolV04.CommitStatus commitStatus = commitProtocol.status(commitId);
+        assertEq(uint256(commitStatus), uint256(CommitProtocolV04.CommitStatus.created));
+
+        // 2. Test cannot verify before join
+        vm.expectRevert(abi.encodeWithSignature(
+            "InvalidParticipantStatus(uint256,address,string)",
+            commitId,
+            bob,
+            "not-joined"
+        ));
+        commitProtocol.verify(commitId, bob, "");
+        vm.stopPrank();
+
+        // 3. Join and verify (Active -> Verified)
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.startPrank(alice);
+        commitProtocol.verify(commitId, bob, "");
+        vm.stopPrank();
+
+        // 4. Test cannot join after join period
+        address charlie = address(0x4444);
+        vm.startPrank(charlie);
+        stakeToken.mint(charlie, 1000 ether);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(charlie, 1 ether);
+        
+        vm.expectRevert(abi.encodeWithSignature("CommitClosed(uint256,string)", commitId, "join"));
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+    }
+
+    function testVerifyOverride() public {
+        // Setup commit and participant
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // Test non-owner cannot override
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", alice));
+        commitProtocol.verifyOverride(commitId, bob);
+        vm.stopPrank();
+
+        // Test owner can override
+        vm.startPrank(protocolOwner);
+        commitProtocol.verifyOverride(commitId, bob);
+        assertEq(uint256(commitProtocol.participants(commitId, bob)), uint256(CommitProtocolV04.ParticipantStatus.verified));
+        vm.stopPrank();
+
+        // Test cannot override already verified
+        vm.startPrank(protocolOwner);
+        vm.expectRevert(abi.encodeWithSignature("InvalidParticipantStatus(uint256,address,string)", commitId, bob, "already-verified"));
+        commitProtocol.verifyOverride(commitId, bob);
+        vm.stopPrank();
+    }
+
+    function testPauseUnpause() public {
+        vm.startPrank(protocolOwner);
+        commitProtocol.pause();
+        
+        vm.deal(protocolOwner, 1 ether);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        commitProtocol.create{value: 0.01 ether}(createCommit());
+        
+        commitProtocol.unpause();
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        assertGt(commitId, 0, "Create failed");
+        vm.stopPrank();
+    }
+
+     function testE2ESuccessfulCommitmentLifecycle() public {
+        // 1. Setup: Alice creates a commit
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        vm.stopPrank();
+
+        // 2. Bob joins the commit
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // 3. Time passes, verification period starts
+        vm.warp(block.timestamp + 1 days + 1);
+        
+        // 4. Alice verifies Bob's completion
+        vm.startPrank(alice);
+        bool verified = commitProtocol.verify(commitId, bob, "");
+        assertTrue(verified, "Verification failed");
+        vm.stopPrank();
+
+        // 5. Creator claims their fees
+        uint256 aliceBalanceBefore = stakeToken.balanceOf(alice);
+        vm.startPrank(alice);
+        commitProtocol.withdraw(address(stakeToken), alice);
+        uint256 aliceBalanceAfter = stakeToken.balanceOf(alice);
+        assertGt(aliceBalanceAfter, aliceBalanceBefore, "Creator fee claim failed");
+        vm.stopPrank();
+
+        // 6. Time passes, claim period starts
+        vm.warp(block.timestamp + 1 days + 1);
+
+        // 7. Bob claims their rewards
+        uint256 bobBalanceBefore = stakeToken.balanceOf(bob);
+        vm.startPrank(bob);
+        commitProtocol.claim(commitId, bob);
+        uint256 bobBalanceAfter = stakeToken.balanceOf(bob);
+        assertGt(bobBalanceAfter, bobBalanceBefore, "Participant reward claim failed");
+        vm.stopPrank();
+
+        // 8. Verify final state
+        assertEq(uint256(commitProtocol.participants(commitId, bob)), uint256(CommitProtocolV04.ParticipantStatus.claimed), "Final participant status incorrect");
+        assertEq(commitProtocol.claims(address(stakeToken), alice), 0, "Creator claims not cleared");
+        assertEq(commitProtocol.funds(address(stakeToken), commitId), 0, "Commit funds not cleared");
+    }
+
+    function testE2EEmergencyScenario() public {
+        // 1. Create and setup commit
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        vm.stopPrank();
+
+        // Bob joins
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // 2. Owner pauses contract
+        vm.startPrank(protocolOwner);
+        commitProtocol.pause();
+
+        // 3. Verify operations are blocked for new participants
+        address charlie = address(0x4444);
+        vm.startPrank(charlie);
+        stakeToken.mint(charlie, 100 ether);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(charlie, 1 ether);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // 4. Owner performs emergency withdrawal
+        vm.startPrank(protocolOwner);
+        uint256 balanceBefore = stakeToken.balanceOf(address(commitProtocol));
+        commitProtocol.emergencyWithdraw(address(stakeToken), balanceBefore);
+        uint256 balanceAfter = stakeToken.balanceOf(address(commitProtocol));
+        assertEq(balanceAfter, 0, "Emergency withdrawal failed");
+
+        // 5. Owner unpauses contract
+        commitProtocol.unpause();
+        vm.stopPrank();
+
+        // 6. Verify operations resume
+        vm.startPrank(charlie);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+    }
+}
+// Helper contract for testing verification failures
+contract FailingMockVerifier is IVerifier {
+    function verify(address, bytes calldata, bytes calldata) external pure returns (bool) {
+        return false;
     }
 }
