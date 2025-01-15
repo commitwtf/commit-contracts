@@ -73,6 +73,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
 
     enum CommitStatus {
         created,
+        resolved,
         cancelled
     }
 
@@ -283,6 +284,7 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
                 emit Claimed(commitId, participant, token, reward);
             }
         }
+        status[commitId] = CommitStatus.resolved;
     }
 
     /**
