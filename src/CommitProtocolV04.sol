@@ -387,6 +387,20 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     }
 
     /**
+     * @notice Returns the approved tokens
+     */
+    function getApprovedTokens() public view returns (address[] memory) {
+        return approvedTokens.values();
+    }
+
+    /**
+     * @notice Returns the tokens used for a commit
+     */
+    function getCommitTokens(uint256 commitId) public view returns (address[] memory) {
+        return commitTokens[commitId].values();
+    }
+
+    /**
      * @dev Sets the base URI for the ERC1155 tokens.
      * for example: https://commit.wtf/api/commit/{id}.json
      * this endpoint will dynamically generate the metadata based on token status (verified, claimed, rewards etc)
