@@ -5,6 +5,7 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {TokenUtils} from "./libraries/TokenUtils.sol";
 import {IVerifier} from "./interfaces/IVerifier.sol";
 import {CommitProtocolERC1155} from "./CommitProtocolERC1155.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title CommitProtocolV04
