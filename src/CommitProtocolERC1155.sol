@@ -2,8 +2,6 @@
 pragma solidity ^0.8.28;
 
 import {ERC1155Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
-import {ERC1155BurnableUpgradeable} from
-    "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155BurnableUpgradeable.sol";
 import {ERC1155SupplyUpgradeable} from
     "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155SupplyUpgradeable.sol";
 import {ERC1155PausableUpgradeable} from
@@ -16,7 +14,6 @@ contract CommitProtocolERC1155 is
     ERC1155Upgradeable,
     OwnableUpgradeable,
     ERC1155PausableUpgradeable,
-    ERC1155BurnableUpgradeable,
     UUPSUpgradeable,
     ReentrancyGuardUpgradeable,
     ERC1155SupplyUpgradeable
@@ -31,7 +28,6 @@ contract CommitProtocolERC1155 is
         __ERC1155_init("");
         __Ownable_init(initialOwner);
         __ERC1155Pausable_init();
-        __ERC1155Burnable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
     }
