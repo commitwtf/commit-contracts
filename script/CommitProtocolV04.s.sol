@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
 
-import {Script, console} from "forge-std/Script.sol";
+import {Script} from "forge-std/src/Script.sol";
+import {console} from "../lib/forge-std/src/console.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import {CommitProtocolV04} from "../src/CommitProtocolV04.sol";
-import {CommitProtocolERC1155} from "../src/CommitProtocolERC1155.sol";
 
 contract DeployCommitProtocol is Script {
     CommitProtocolV04 public protocol;
@@ -17,7 +17,9 @@ contract DeployCommitProtocol is Script {
         vm.startBroadcast();
 
         address proxy =
-            Upgrades.deployUUPSProxy("CommitProtocolV04.sol", abi.encodeCall(CommitProtocolERC1155.initialize, (owner)));
+            Upgrades.deployUUPSProxy(
+                "CommitProtocolV04.sol",
+                abi.encodeCall(CommitProtocolV04.initialize, (owner)));
 
         CommitProtocolV04.ProtocolConfig memory config = CommitProtocolV04.ProtocolConfig({
             maxCommitDuration: 30 days,

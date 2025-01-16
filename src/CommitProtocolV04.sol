@@ -1,20 +1,41 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC1155Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
+import {ERC1155SupplyUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155SupplyUpgradeable.sol";
+import {ERC1155PausableUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155PausableUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {TokenUtils} from "./libraries/TokenUtils.sol";
 import {IVerifier} from "./interfaces/IVerifier.sol";
-import {CommitProtocolERC1155} from "./CommitProtocolERC1155.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/**
- * @title CommitProtocolV04
- * @notice Handles the creation and management of “Commits,”
- *         where users can stake tokens, complete verifications,
- *         and claim rewards. Supports multiple tokens and flexible fees.
- */
-contract CommitProtocolV04 is CommitProtocolERC1155 {
+/// @title CommitProtocolV04
+/// @notice Enables users to create and participate in commitment-based challenges
+
+contract CommitProtocolV04 is
+    UUPSUpgradeable,
+    ReentrancyGuardUpgradeable,
+    OwnableUpgradeable,
+    ERC1155Upgradeable,    
+    ERC1155PausableUpgradeable,
+    ERC1155SupplyUpgradeable
+{
     using EnumerableSet for EnumerableSet.AddressSet;
+
+ function initialize(
+    address initialOwner
+    ) public initializer {
+        __Ownable_init(initialOwner);
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
+        __ERC1155Pausable_init();
+        __ERC1155_init("");
+    }  
 
     event TokenApproved(address indexed token, bool isApproved);
     event Created(uint256 indexed commitId, Commit config);
@@ -416,6 +437,26 @@ contract CommitProtocolV04 is CommitProtocolERC1155 {
     function setProtocolConfig(ProtocolConfig calldata _c) public onlyOwner {
         config = _c;
     }
+
+  function pause() public onlyOwner {
+        _pause();
+    }
+
+    function unpause() public onlyOwner {
+        _unpause();
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    // The following functions are overrides required by Solidity.
+
+    function _update(address from, address to, uint256[] memory ids, uint256[] memory values)
+        internal
+        override(ERC1155Upgradeable, ERC1155PausableUpgradeable, ERC1155SupplyUpgradeable)
+    {
+        super._update(from, to, ids, values);
+    }
+
 
     /**
      * @notice Owner-only function to withdraw tokens in emergencies (if needed).
