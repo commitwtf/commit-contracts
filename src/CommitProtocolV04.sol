@@ -371,16 +371,31 @@ contract CommitProtocolV04 is
 
     // Participants can claim refund of cancelled commits
     function refund(uint256 commitId, address participant) public nonReentrant {
+        // Only the participant can request their own refund
+        if (msg.sender != participant) {
+            revert InvalidParticipantStatus(commitId, participant, "not-authorized");
+        }
+        
         Commit memory commit = getCommit(commitId);
         if (status[commitId] != CommitStatus.cancelled) {
             revert InvalidCommitStatus(commitId, "not-cancelled");
         }
-        if (participants[commitId][participant] != ParticipantStatus.joined) {
+
+        ParticipantStatus currentStatus = participants[commitId][participant];
+        if (currentStatus == ParticipantStatus.claimed) {
+            revert InvalidParticipantStatus(commitId, participant, "already-claimed");
+        }
+        if (currentStatus == ParticipantStatus.init) {
             revert InvalidParticipantStatus(commitId, participant, "not-joined");
         }
+        
+        // Update participant status to prevent multiple refunds
+        participants[commitId][participant] = ParticipantStatus.claimed;
+        
         // Transfer stake amount to participant
         funds[commit.token][commitId] -= commit.stake;
-        TokenUtils.transfer(commit.token, msg.sender, commit.stake);
+        TokenUtils.transfer(commit.token, participant, commit.stake);
+        
         emit Refunded(commitId, participant, commit.token, commit.stake);
     }
 
