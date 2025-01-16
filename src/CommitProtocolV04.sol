@@ -13,6 +13,9 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {TokenUtils} from "./libraries/TokenUtils.sol";
 import {IVerifier} from "./interfaces/IVerifier.sol";
+import {EASVerifier} from "./verifiers/EASVerifier.sol";
+import {SignatureVerifier} from "./verifiers/SignatureVerifier.sol";
+import {TokenVerifier, ERC1155Verifier} from "./verifiers/TokenVerifier.sol";
 
 /// @title CommitProtocolV04
 /// @notice Enables users to create and participate in commitment-based challenges
@@ -141,7 +144,7 @@ contract CommitProtocolV04 is
     mapping(uint256 => EnumerableSet.AddressSet) private commitTokens;
 
     // Max share for protocol + client combined (15%)
-    uint256 public immutable MAX_SHARE_BPS = 1500;
+    uint256 public constant MAX_SHARE_BPS = 1500;
 
     // Storage gap for future upgrades
     uint256[50] private __gap;

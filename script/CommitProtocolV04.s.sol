@@ -6,6 +6,7 @@ import {console} from "../lib/forge-std/src/console.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import {CommitProtocolV04} from "../src/CommitProtocolV04.sol";
 
+
 contract DeployCommitProtocol is Script {
 
     function run() public {
