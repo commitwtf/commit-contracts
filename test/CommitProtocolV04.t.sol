@@ -85,7 +85,7 @@ contract CommitProtocolV04Test is Test {
 
         // Verify the commit data is stored properly
         CommitProtocolV04.Commit memory stored = commitProtocol.getCommit(commitId);
-        assertEq(stored.owner, alice, "Owner mismatch");
+        assertEq(stored.creator, alice, "Creator mismatch");
         assertEq(stored.maxParticipants, 2, "Max participants mismatch");
         assertEq(stored.token, address(stakeToken), "Token mismatch");
 
@@ -260,7 +260,7 @@ contract CommitProtocolV04Test is Test {
 
     function createCommit() public returns (CommitProtocolV04.Commit memory) {
         return CommitProtocolV04.Commit({
-            owner: alice,
+            creator: alice,
             metadataURI: "ipfs://commitMetadata",
             joinBefore: block.timestamp + 1 days,
             verifyBefore: block.timestamp + 2 days,
@@ -320,7 +320,7 @@ contract CommitProtocolV04Test is Test {
         vm.stopPrank();
         
         vm.startPrank(bob);
-        vm.expectRevert(abi.encodeWithSignature("InvalidCommitOwner(uint256)", commitId));
+        vm.expectRevert(abi.encodeWithSignature("InvalidCommitCreator(uint256)", commitId));
         commitProtocol.cancel(commitId);
         vm.stopPrank();
 

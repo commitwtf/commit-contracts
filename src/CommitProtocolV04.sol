@@ -55,7 +55,7 @@ contract CommitProtocolV04 is
     error InvalidParticipantStatus(uint256 commitId, address participant, string reason);
     error MaxParticipantsReached(uint256 commitId);
     error NoVerified(uint256 commitId);
-    error InvalidCommitOwner(uint256 commitId);
+    error InvalidCommitCreator(uint256 commitId);
 
     struct ProtocolConfig {
         uint256 maxCommitDuration; // Maximum allowable duration from join to verify
@@ -70,7 +70,7 @@ contract CommitProtocolV04 is
     }
 
     struct Commit {
-        address owner; // Owner/creator of the commit
+        address creator; // Creator of the commit
         string metadataURI; // Metadata describing the commit
         uint256 joinBefore; // Deadline for participants to join
         uint256 verifyBefore; // Deadline for verifications
@@ -222,7 +222,7 @@ contract CommitProtocolV04 is
         funds[commit.token][commitId] += commit.stake;
 
         // Set aside creator fee to claims
-        claims[commit.token][commit.owner] += commit.fee;
+        claims[commit.token][commit.creator] += commit.fee;
 
         // Transfer stake + creator fee to this contract
         TokenUtils.transferFrom(commit.token, msg.sender, address(this), commit.stake + commit.fee);
@@ -354,11 +354,11 @@ contract CommitProtocolV04 is
         emit Withdraw(account, token, amount);
     }
 
-    // Commit owner can cancel the commit
+    // Commit creator can cancel the commit
     function cancel(uint256 commitId) public {
         Commit memory commit = getCommit(commitId);
-        if (msg.sender != commit.owner) {
-            revert InvalidCommitOwner(commitId);
+        if (msg.sender != commit.creator) {
+            revert InvalidCommitCreator(commitId);
         }
         if (block.timestamp >= commit.joinBefore) {
             revert CommitClosed(commitId, "join");
