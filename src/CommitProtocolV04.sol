@@ -250,9 +250,6 @@ contract CommitProtocolV04 is
         if (block.timestamp >= commit.verifyBefore) {
             revert CommitClosed(commitId, "verify");
         }
-        if (status[commitId] == CommitStatus.cancelled) {
-            revert InvalidCommitStatus(commitId, "cancelled");
-        }
 
         commitTokens[commitId].add(token);
 
@@ -275,9 +272,6 @@ contract CommitProtocolV04 is
         }
         if (participants[commitId][participant] != ParticipantStatus.joined) {
             revert InvalidParticipantStatus(commitId, participant, "not-joined");
-        }
-        if (status[commitId] == CommitStatus.cancelled) {
-            revert InvalidCommitStatus(commitId, "cancelled");
         }
         // Use fulfillVerifier to check if participant truly completed the commit
         bool ok = IVerifier(c.fulfillVerifier.target).verify(participant, c.fulfillVerifier.data, data);
