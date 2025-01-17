@@ -284,12 +284,6 @@ contract CommitProtocolV04Test is Test {
         uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
         vm.stopPrank();
 
-        vm.startPrank(bob);
-        stakeToken.approve(address(commitProtocol), type(uint256).max);
-        vm.deal(bob, 1 ether);
-        commitProtocol.join{value: 0.01 ether}(commitId, "");
-        vm.stopPrank();
-
         // 2. Creator (alice) triggers cancel
         vm.startPrank(alice);
         vm.warp(commitProtocol.getCommit(commitId).verifyBefore);
