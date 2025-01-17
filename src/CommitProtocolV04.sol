@@ -358,7 +358,7 @@ contract CommitProtocolV04 is
         if (msg.sender != commit.creator) {
             revert InvalidCommitCreator(commitId);
         }
-        if (block.timestamp >= commit.joinBefore) {
+        if (block.timestamp >= commit.verifyBefore) {
             revert CommitClosed(commitId, "join");
         }
 
@@ -368,33 +368,25 @@ contract CommitProtocolV04 is
     }
 
     // Participants can claim refund of cancelled commits
-    function refund(uint256 commitId, address participant) public nonReentrant {
-        // Only the participant can request their own refund
-        if (msg.sender != participant) {
-            revert InvalidParticipantStatus(commitId, participant, "not-authorized");
-        }
-
+    function refund(uint256 commitId) public nonReentrant {
         Commit memory commit = getCommit(commitId);
         if (status[commitId] != CommitStatus.cancelled) {
             revert InvalidCommitStatus(commitId, "not-cancelled");
         }
 
-        ParticipantStatus currentStatus = participants[commitId][participant];
-        if (currentStatus == ParticipantStatus.claimed) {
-            revert InvalidParticipantStatus(commitId, participant, "already-claimed");
-        }
-        if (currentStatus == ParticipantStatus.init) {
-            revert InvalidParticipantStatus(commitId, participant, "not-joined");
+        ParticipantStatus currentStatus = participants[commitId][msg.sender];
+        if (!(currentStatus == ParticipantStatus.joined || currentStatus == ParticipantStatus.verified)) {
+            revert InvalidParticipantStatus(commitId, msg.sender, "not-joined");
         }
 
         // Update participant status to prevent multiple refunds
-        participants[commitId][participant] = ParticipantStatus.claimed;
+        participants[commitId][msg.sender] = ParticipantStatus.claimed;
 
-        // Transfer stake amount to participant
+        // Transfer stake amount to msg.sender
         funds[commit.token][commitId] -= commit.stake;
-        TokenUtils.transfer(commit.token, participant, commit.stake);
+        TokenUtils.transfer(commit.token, msg.sender, commit.stake);
 
-        emit Refunded(commitId, participant, commit.token, commit.stake);
+        emit Refunded(commitId, msg.sender, commit.token, commit.stake);
     }
 
     function verifyOverride(uint256 commitId, address participant) public onlyOwner {

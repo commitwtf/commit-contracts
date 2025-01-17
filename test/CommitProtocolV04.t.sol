@@ -258,7 +258,7 @@ contract CommitProtocolV04Test is Test {
         assertEq(aliceBalAfter - aliceBalBefore, 2 ether, "Incorrect withdrawal amount");
     }
 
-    function createCommit() public returns (CommitProtocolV04.Commit memory) {
+    function createCommit() public view returns (CommitProtocolV04.Commit memory) {
         return CommitProtocolV04.Commit({
             creator: alice,
             metadataURI: "ipfs://commitMetadata",
@@ -304,7 +304,13 @@ contract CommitProtocolV04Test is Test {
 
         // 3. Bob requests refund
         vm.startPrank(bob);
-        commitProtocol.refund(commitId, bob);
+        commitProtocol.refund(commitId);
+
+        // Can only refund once
+        vm.expectRevert(
+            abi.encodeWithSignature("InvalidParticipantStatus(uint256,address,string)", commitId, bob, "not-joined")
+        );
+        commitProtocol.refund(commitId);
         vm.stopPrank();
 
         // 4. Verify refund amounts
