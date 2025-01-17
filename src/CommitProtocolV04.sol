@@ -191,6 +191,9 @@ contract CommitProtocolV04 is
      */
     function join(uint256 commitId, bytes calldata data) public payable nonReentrant {
         Commit memory commit = getCommit(commitId);
+        if (status[commitId] != CommitStatus.created) {
+            revert InvalidCommitStatus(commitId, "not-created");
+        }
         if (block.timestamp >= commit.joinBefore) {
             revert CommitClosed(commitId, "join");
         }
@@ -241,6 +244,9 @@ contract CommitProtocolV04 is
         onlyApprovedToken(token)
     {
         Commit memory commit = getCommit(commitId);
+        if (status[commitId] != CommitStatus.created) {
+            revert InvalidCommitStatus(commitId, "not-created");
+        }
         if (block.timestamp >= commit.verifyBefore) {
             revert CommitClosed(commitId, "verify");
         }
@@ -258,6 +264,9 @@ contract CommitProtocolV04 is
      */
     function verify(uint256 commitId, address participant, bytes calldata data) public payable returns (bool) {
         Commit memory c = getCommit(commitId);
+        if (status[commitId] != CommitStatus.created) {
+            revert InvalidCommitStatus(commitId, "not-created");
+        }
         if (block.timestamp >= c.verifyBefore) {
             revert CommitClosed(commitId, "verify");
         }
