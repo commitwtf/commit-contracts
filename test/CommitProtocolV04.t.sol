@@ -277,6 +277,33 @@ contract CommitProtocolV04Test is Test {
         });
     }
 
+    function testCancel() public {
+        // 1. Setup: Create and join commit
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // 2. Creator (alice) triggers cancel
+        vm.startPrank(alice);
+        vm.warp(commitProtocol.getCommit(commitId).verifyBefore);
+        vm.expectRevert(abi.encodeWithSignature("CommitClosed(uint256,string)", commitId, "join"));
+        commitProtocol.cancel(commitId);
+        vm.warp(commitProtocol.getCommit(commitId).verifyBefore - 1);
+        commitProtocol.cancel(commitId);
+
+        // Check status changed
+        CommitProtocolV04.CommitStatus commitStatus = commitProtocol.status(commitId);
+        assertEq(uint256(commitStatus), uint256(CommitProtocolV04.CommitStatus.cancelled));
+        vm.stopPrank();
+    }
+
     function testCancelAndRefund() public {
         // 1. Setup: Create and join commit
         vm.startPrank(alice);
