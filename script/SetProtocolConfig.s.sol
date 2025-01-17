@@ -8,7 +8,7 @@ import {CommitProtocolV04} from "../src/CommitProtocolV04.sol";
 contract SetProtocolConfig is Script {
     function run() public {
         address protocolAddress = vm.envAddress("PROTOCOL_ADDRESS");
-        
+
         CommitProtocolV04.ProtocolConfig memory config = CommitProtocolV04.ProtocolConfig({
             maxCommitDuration: 31536000, // 365 days in seconds
             baseURI: "https://commit.wtf",
@@ -23,7 +23,7 @@ contract SetProtocolConfig is Script {
 
         // Get protocol contract instance
         CommitProtocolV04 protocol = CommitProtocolV04(protocolAddress);
-        
+
         // Call setProtocolConfig
         protocol.setProtocolConfig(config);
 
@@ -36,4 +36,4 @@ contract SetProtocolConfig is Script {
         console.log("- Fee amount:", config.fee.fee, "wei");
         console.log("- Share BPS:", config.fee.shareBps / 100, "%");
     }
-} 
+}

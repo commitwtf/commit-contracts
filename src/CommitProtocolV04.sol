@@ -24,21 +24,19 @@ contract CommitProtocolV04 is
     UUPSUpgradeable,
     ReentrancyGuardUpgradeable,
     OwnableUpgradeable,
-    ERC1155Upgradeable,    
+    ERC1155Upgradeable,
     ERC1155PausableUpgradeable,
     ERC1155SupplyUpgradeable
 {
     using EnumerableSet for EnumerableSet.AddressSet;
 
- function initialize(
-    address initialOwner
-    ) public initializer {
+    function initialize(address initialOwner) public initializer {
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         __ERC1155Pausable_init();
         __ERC1155_init("");
-    }  
+    }
 
     event TokenApproved(address indexed token, bool isApproved);
     event Created(uint256 indexed commitId, Commit config);
@@ -378,7 +376,7 @@ contract CommitProtocolV04 is
         if (msg.sender != participant) {
             revert InvalidParticipantStatus(commitId, participant, "not-authorized");
         }
-        
+
         Commit memory commit = getCommit(commitId);
         if (status[commitId] != CommitStatus.cancelled) {
             revert InvalidCommitStatus(commitId, "not-cancelled");
@@ -391,14 +389,14 @@ contract CommitProtocolV04 is
         if (currentStatus == ParticipantStatus.init) {
             revert InvalidParticipantStatus(commitId, participant, "not-joined");
         }
-        
+
         // Update participant status to prevent multiple refunds
         participants[commitId][participant] = ParticipantStatus.claimed;
-        
+
         // Transfer stake amount to participant
         funds[commit.token][commitId] -= commit.stake;
         TokenUtils.transfer(commit.token, participant, commit.stake);
-        
+
         emit Refunded(commitId, participant, commit.token, commit.stake);
     }
 
@@ -456,7 +454,7 @@ contract CommitProtocolV04 is
         config = _c;
     }
 
-  function pause() public onlyOwner {
+    function pause() public onlyOwner {
         _pause();
     }
 
@@ -474,7 +472,6 @@ contract CommitProtocolV04 is
     {
         super._update(from, to, ids, values);
     }
-
 
     /**
      * @notice Owner-only function to withdraw tokens in emergencies (if needed).
