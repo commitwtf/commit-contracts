@@ -141,6 +141,9 @@ contract CommitProtocolV04 is
     // Max share for protocol + client combined (15%)
     uint256 public constant MAX_SHARE_BPS = 1500;
 
+    string public name = "COMMIT";
+    string public symbol = "COMMIT";
+
     // Storage gap for future upgrades
     uint256[50] private __gap;
 
