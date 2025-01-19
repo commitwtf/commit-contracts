@@ -244,6 +244,7 @@ contract CommitProtocolV04 is
         public
         payable
         whenNotPaused
+        nonReentrant
         onlyApprovedToken(token)
     {
         Commit memory commit = getCommit(commitId);
@@ -265,7 +266,12 @@ contract CommitProtocolV04 is
     /**
      * @notice Anyone can call verify to confirm a participant has completed their commit.
      */
-    function verify(uint256 commitId, address participant, bytes calldata data) public payable returns (bool) {
+    function verify(uint256 commitId, address participant, bytes calldata data)
+        public
+        payable
+        nonReentrant
+        returns (bool)
+    {
         Commit memory c = getCommit(commitId);
         if (status[commitId] != CommitStatus.created) {
             revert InvalidCommitStatus(commitId, "not-created");
