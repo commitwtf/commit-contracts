@@ -123,6 +123,9 @@ contract CommitProtocolV04 is
     // token => (commitId => total staked + funded)
     mapping(address => mapping(uint256 => uint256)) public funds;
 
+    // token => (commitId => (funder => amount))
+    mapping(address => mapping(uint256 => mapping(address => uint256))) public fundsByAddress;
+
     // token => (recipient => amount) for fees or distributions
     mapping(address => mapping(address => uint256)) public claims;
 
@@ -224,6 +227,7 @@ contract CommitProtocolV04 is
 
         // Add participant stake
         funds[commit.token][commitId] += commit.stake;
+        fundsByAddress[commit.token][commitId][msg.sender] += commit.stake;
 
         // Set aside creator fee to claims
         claims[commit.token][commit.creator] += commit.fee;
@@ -259,6 +263,7 @@ contract CommitProtocolV04 is
 
         // Transfer tokens into the commit’s pool
         funds[token][commitId] += amount;
+        fundsByAddress[token][commitId][msg.sender] += amount;
         TokenUtils.transferFrom(token, msg.sender, address(this), amount);
         emit Funded(commitId, msg.sender, token, amount);
     }
@@ -385,24 +390,20 @@ contract CommitProtocolV04 is
         emit Cancelled(commitId);
     }
 
-    // Participants can claim refund of cancelled commits
+    // Participants and funders can claim refund of cancelled commits
     function refund(uint256 commitId) public nonReentrant {
         Commit memory commit = getCommit(commitId);
         if (status[commitId] != CommitStatus.cancelled) {
             revert InvalidCommitStatus(commitId, "not-cancelled");
         }
 
-        ParticipantStatus currentStatus = participants[commitId][msg.sender];
-        if (!(currentStatus == ParticipantStatus.joined || currentStatus == ParticipantStatus.verified)) {
-            revert InvalidParticipantStatus(commitId, msg.sender, "not-joined");
-        }
-
-        // Update participant status to prevent multiple refunds
-        participants[commitId][msg.sender] = ParticipantStatus.claimed;
-
         // Transfer stake amount to msg.sender
-        funds[commit.token][commitId] -= commit.stake;
-        TokenUtils.transfer(commit.token, msg.sender, commit.stake);
+        uint256 amount = fundsByAddress[commit.token][commitId][msg.sender];
+        // Reset funds to they can't be claimed again
+        fundsByAddress[commit.token][commitId][msg.sender] = 0;
+
+        funds[commit.token][commitId] -= amount;
+        TokenUtils.transfer(commit.token, msg.sender, amount);
 
         emit Refunded(commitId, msg.sender, commit.token, commit.stake);
     }
