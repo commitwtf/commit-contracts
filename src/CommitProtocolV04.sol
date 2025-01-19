@@ -357,11 +357,11 @@ contract CommitProtocolV04 is
     /**
      * @notice Allows creators, clients, and the protocol to withdraw their accumulated fee claims.
      */
-    function withdraw(address token, address account) public payable nonReentrant {
-        uint256 amount = claims[token][account];
-        claims[token][account] = 0;
-        TokenUtils.transfer(token, account, amount);
-        emit Withdraw(account, token, amount);
+    function withdraw(address token) public payable nonReentrant {
+        uint256 amount = claims[token][msg.sender];
+        claims[token][msg.sender] = 0;
+        TokenUtils.transfer(token, msg.sender, amount);
+        emit Withdraw(msg.sender, token, amount);
     }
 
     // Commit creator can cancel the commit
