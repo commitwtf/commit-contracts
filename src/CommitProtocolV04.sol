@@ -419,7 +419,7 @@ contract CommitProtocolV04 is
             revert InvalidCommitCreator(commitId);
         }
         if (block.timestamp >= commit.verifyBefore) {
-            revert CommitClosed(commitId, "join");
+            revert CommitClosed(commitId, "verify");
         }
 
         status[commitId] = CommitStatus.cancelled;
