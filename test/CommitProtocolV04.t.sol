@@ -77,6 +77,10 @@ contract CommitProtocolV04Test is Test {
         CommitProtocolV04.Commit memory newCommit = createCommit();
 
         // Create commit
+        // Check correct fee amount
+        vm.expectRevert("Incorrect ETH amount sent");
+        commitProtocol.create{value: 0.02 ether}(newCommit);
+
         uint256 commitId = commitProtocol.create{value: 0.01 ether}(newCommit);
         createdCommitId = commitId; // store for other tests
         // Check that commitId increments
