@@ -55,6 +55,7 @@ contract CommitProtocolV04 is
     error MaxParticipantsReached(uint256 commitId);
     error NoVerified(uint256 commitId);
     error InvalidCommitCreator(uint256 commitId);
+    error InsufficientAmount();
 
     struct ProtocolConfig {
         uint256 maxCommitDuration; // Maximum allowable duration from join to verify
@@ -288,6 +289,15 @@ contract CommitProtocolV04 is
         }
 
         uint256 amount = fundsByAddress[token][commitId][msg.sender];
+
+        // Prevent participants from withdrawing their stake
+        if (participants[commitId][msg.sender] == ParticipantStatus.joined) {
+            if (amount < commit.stake) {
+                revert InsufficientAmount();
+            }
+            amount -= commit.stake;
+        }
+
         funds[token][commitId] -= amount;
         fundsByAddress[token][commitId][msg.sender] -= amount;
 
