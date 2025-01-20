@@ -364,7 +364,6 @@ contract CommitProtocolV04 is
                 emit Claimed(commitId, participant, token, reward);
             }
         }
-        status[commitId] = CommitStatus.resolved;
     }
 
     /**
@@ -372,6 +371,9 @@ contract CommitProtocolV04 is
      *         to the protocol and client.
      */
     function distribute(uint256 commitId, address token) public {
+        if (status[commitId] == CommitStatus.cancelled) {
+            revert InvalidCommitStatus(commitId, "cancelled");
+        }
         Commit memory commit = getCommit(commitId);
         if (block.timestamp <= commit.verifyBefore) {
             revert CommitClosed(commitId, "verify still open");
