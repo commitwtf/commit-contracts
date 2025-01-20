@@ -662,7 +662,6 @@ contract CommitProtocolV04Test is Test {
         uint256 bobBalanceAfter = bob.balance;
         assertGt(bobBalanceAfter, bobBalanceBefore, "Participant reward claim failed");
         vm.stopPrank();
-        return;
 
         // 8. Verify final state
         assertEq(
