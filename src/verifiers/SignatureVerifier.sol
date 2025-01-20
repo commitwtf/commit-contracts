@@ -22,6 +22,9 @@ contract SignatureVerifier is IVerifier {
         (uint256 timestamp, uint256 commitId, bytes memory signature) =
             abi.decode(userdata, (uint256, uint256, bytes));
 
+        // Ensure the timestamp is not in the future
+        require(timestamp <= block.timestamp, "Invalid future timestamp");
+
         // Ensure the signature hasn't expired
         require(block.timestamp <= timestamp + SIGNATURE_EXPIRY, "Signature expired");
 
