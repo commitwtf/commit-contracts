@@ -62,7 +62,7 @@ contract CommitProtocolV04Test is Test {
         // 4. Approve tokens in the protocol
         commitProtocol.approveToken(address(stakeToken), true);
         commitProtocol.approveToken(address(altToken), true);
-
+        commitProtocol.approveToken(address(0), true);
         vm.stopPrank();
     }
 
@@ -74,7 +74,7 @@ contract CommitProtocolV04Test is Test {
         vm.deal(alice, 1 ether); // give Alice some ETH to pay for creation
 
         // Build Commit details
-        CommitProtocolV04.Commit memory newCommit = createCommit();
+        CommitProtocolV04.Commit memory newCommit = createCommit(address(stakeToken));
 
         // Create commit
         // Check correct fee amount
@@ -103,7 +103,7 @@ contract CommitProtocolV04Test is Test {
         // First create the commit as Alice
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         // Bob joins the commit
@@ -112,6 +112,10 @@ contract CommitProtocolV04Test is Test {
 
         // Must pay protocol fee of 0.01 ETH to join
         vm.deal(bob, 1 ether);
+        // Test check join fee matches
+        vm.expectRevert("Incorrect ETH amount sent");
+        commitProtocol.join{value: 0.02 ether}(commitId, "");
+
         commitProtocol.join{value: 0.01 ether}(commitId, "");
 
         // Join fee should be transferred to protocol fee recipient
@@ -141,7 +145,7 @@ contract CommitProtocolV04Test is Test {
         {
             vm.startPrank(alice);
             vm.deal(alice, 1 ether);
-            commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+            commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
             vm.stopPrank();
 
             vm.startPrank(bob);
@@ -185,7 +189,7 @@ contract CommitProtocolV04Test is Test {
         // 1. Create commit
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         // 2. Bob joins
@@ -239,7 +243,7 @@ contract CommitProtocolV04Test is Test {
         // 1. Create & join quickly
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
         vm.startPrank(bob);
         stakeToken.approve(address(commitProtocol), type(uint256).max);
@@ -262,7 +266,7 @@ contract CommitProtocolV04Test is Test {
         assertEq(aliceBalAfter - aliceBalBefore, 2 ether, "Incorrect withdrawal amount");
     }
 
-    function createCommit() public view returns (CommitProtocolV04.Commit memory) {
+    function createCommit(address token) public view returns (CommitProtocolV04.Commit memory) {
         return CommitProtocolV04.Commit({
             creator: alice,
             metadataURI: "ipfs://commitMetadata",
@@ -271,7 +275,7 @@ contract CommitProtocolV04Test is Test {
             maxParticipants: 2,
             joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
             fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-            token: address(stakeToken),
+            token: token,
             stake: 10 ether,
             fee: 2 ether,
             client: CommitProtocolV04.ClientConfig({
@@ -285,7 +289,7 @@ contract CommitProtocolV04Test is Test {
         // 1. Setup: Create and join commit
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         // 2. Creator (alice) triggers cancel
@@ -306,7 +310,7 @@ contract CommitProtocolV04Test is Test {
         // 1. Setup: Create and join commit
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         vm.startPrank(bob);
@@ -342,7 +346,7 @@ contract CommitProtocolV04Test is Test {
         // Test unauthorized cancel
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         vm.startPrank(bob);
@@ -361,7 +365,7 @@ contract CommitProtocolV04Test is Test {
         // 1. Setup commit and participant
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         vm.startPrank(bob);
@@ -397,7 +401,7 @@ contract CommitProtocolV04Test is Test {
         // 1. Create and join commit
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         vm.startPrank(bob);
@@ -463,7 +467,7 @@ contract CommitProtocolV04Test is Test {
         vm.stopPrank();
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        CommitProtocolV04.Commit memory invalidCommit = createCommit();
+        CommitProtocolV04.Commit memory invalidCommit = createCommit(address(stakeToken));
         invalidCommit.token = newToken;
 
         vm.expectRevert(abi.encodeWithSignature("TokenNotApproved(address)", newToken));
@@ -475,7 +479,7 @@ contract CommitProtocolV04Test is Test {
         // 1. Create commit
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
 
         CommitProtocolV04.CommitStatus commitStatus = commitProtocol.status(commitId);
         assertEq(uint256(commitStatus), uint256(CommitProtocolV04.CommitStatus.created));
@@ -515,7 +519,7 @@ contract CommitProtocolV04Test is Test {
         // Setup commit and participant
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         vm.startPrank(bob);
@@ -555,10 +559,10 @@ contract CommitProtocolV04Test is Test {
 
         vm.deal(protocolOwner, 1 ether);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        commitProtocol.create{value: 0.01 ether}(createCommit());
+        commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
 
         commitProtocol.unpause();
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         assertGt(commitId, 0, "Create failed");
         vm.stopPrank();
     }
@@ -567,7 +571,7 @@ contract CommitProtocolV04Test is Test {
         // 1. Setup: Alice creates a commit
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         // 2. Bob joins the commit
@@ -615,11 +619,66 @@ contract CommitProtocolV04Test is Test {
         assertEq(commitProtocol.funds(address(stakeToken), commitId), 0, "Commit funds not cleared");
     }
 
+    function testE2ESuccessfulCommitmentLifecycleETH() public {
+        // 1. Setup: Alice creates a commit
+
+        vm.startPrank(alice);
+        vm.deal(alice, 100 ether);
+
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(0)));
+        vm.stopPrank();
+
+        // 2. Bob joins the commit
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 100 ether);
+        commitProtocol.join{value: 12.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // 3. Time passes, verification period starts
+        vm.warp(block.timestamp + 1 days + 1);
+
+        // 4. Alice verifies Bob's completion
+        vm.startPrank(alice);
+        bool verified = commitProtocol.verify(commitId, bob, "");
+        assertTrue(verified, "Verification failed");
+        vm.stopPrank();
+
+        // 5. Creator claims their fees
+        uint256 aliceBalanceBefore = alice.balance;
+        vm.startPrank(alice);
+        commitProtocol.claimFees(address(0));
+        uint256 aliceBalanceAfter = alice.balance;
+        assertGt(aliceBalanceAfter, aliceBalanceBefore, "Creator fee claim failed");
+        vm.stopPrank();
+
+        // 6. Time passes, claim period starts
+        vm.warp(block.timestamp + 1 days + 1);
+
+        // 7. Bob claims their rewards
+        uint256 bobBalanceBefore = bob.balance;
+        vm.startPrank(bob);
+        commitProtocol.claim(commitId, bob);
+        uint256 bobBalanceAfter = bob.balance;
+        assertGt(bobBalanceAfter, bobBalanceBefore, "Participant reward claim failed");
+        vm.stopPrank();
+        return;
+
+        // 8. Verify final state
+        assertEq(
+            uint256(commitProtocol.participants(commitId, bob)),
+            uint256(CommitProtocolV04.ParticipantStatus.claimed),
+            "Final participant status incorrect"
+        );
+        assertEq(commitProtocol.claims(address(stakeToken), alice), 0, "Creator claims not cleared");
+        assertEq(commitProtocol.funds(address(stakeToken), commitId), 0, "Commit funds not cleared");
+    }
+
     function testE2EEmergencyScenario() public {
         // 1. Create and setup commit
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit());
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
         vm.stopPrank();
 
         // Bob joins

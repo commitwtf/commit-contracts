@@ -226,14 +226,11 @@ contract CommitProtocolV04 is
             }
         }
 
-        // Handle ETH (needed because TokenUtils check msg.value == amou t)
+        // Handle ETH (needed because TokenUtils check msg.value == amout)
         if (commit.token == address(0)) {
-            uint256 amount = commit.stake + commit.fee + config.fee.fee;
-            require(msg.value == amount, "Incorrect ETH amount sent");
-            (bool success,) = payable(address(this)).call{value: commit.stake + commit.fee}("");
-            (bool protocolFeeSuccess,) = payable(config.fee.recipient).call{value: config.fee.fee}("");
+            require(msg.value == commit.stake + commit.fee + config.fee.fee, "Incorrect ETH amount sent");
+            (bool success,) = payable(config.fee.recipient).call{value: config.fee.fee}("");
             require(success, "ETH transfer failed");
-            require(protocolFeeSuccess, "ETH transfer failed");
         } else {
             // Pay protocol join fee in ETH
             TokenUtils.transferFrom(address(0), msg.sender, config.fee.recipient, config.fee.fee);
