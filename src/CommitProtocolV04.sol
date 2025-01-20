@@ -41,7 +41,8 @@ contract CommitProtocolV04 is
     event Joined(uint256 indexed commitId, address indexed participant);
     event Verified(uint256 indexed commitId, address indexed participant, bool isVerified);
     event Claimed(uint256 indexed commitId, address indexed participant, address indexed token, uint256 amount);
-    event Withdraw(address indexed recipient, address indexed token, uint256 amount);
+    event ClaimedFees(address indexed recipient, address indexed token, uint256 amount);
+    event Withdraw(uint256 indexed commitId, address indexed recipient, address indexed token, uint256 amount);
     event Cancelled(uint256 indexed commitId);
     event Refunded(uint256 indexed commitId, address indexed participant, address indexed token, uint256 amount);
 
@@ -269,6 +270,31 @@ contract CommitProtocolV04 is
     }
 
     /**
+     * @notice Allows funders to withdraw funded tokens
+     */
+    function withdraw(uint256 commitId, address token, uint256 amount)
+        public
+        payable
+        whenNotPaused
+        nonReentrant
+        onlyApprovedToken(token)
+    {
+        Commit memory commit = getCommit(commitId);
+        if (status[commitId] != CommitStatus.created) {
+            revert InvalidCommitStatus(commitId, "not-created");
+        }
+        if (block.timestamp >= commit.joinBefore) {
+            revert CommitClosed(commitId, "join");
+        }
+
+        funds[token][commitId] -= amount;
+        fundsByAddress[token][commitId][msg.sender] -= amount;
+
+        TokenUtils.transfer(token, msg.sender, amount);
+        emit Withdraw(commitId, msg.sender, token, amount);
+    }
+
+    /**
      * @notice Anyone can call verify to confirm a participant has completed their commit.
      */
     function verify(uint256 commitId, address participant, bytes calldata data)
@@ -368,11 +394,11 @@ contract CommitProtocolV04 is
     /**
      * @notice Allows creators, clients, and the protocol to withdraw their accumulated fee claims.
      */
-    function withdraw(address token) public payable nonReentrant {
+    function claimFees(address token) public payable nonReentrant {
         uint256 amount = claims[token][msg.sender];
         claims[token][msg.sender] = 0;
         TokenUtils.transfer(token, msg.sender, amount);
-        emit Withdraw(msg.sender, token, amount);
+        emit ClaimedFees(msg.sender, token, amount);
     }
 
     // Commit creator can cancel the commit
