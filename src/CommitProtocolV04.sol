@@ -442,7 +442,7 @@ contract CommitProtocolV04 is
         funds[commit.token][commitId] -= amount;
         TokenUtils.transfer(commit.token, msg.sender, amount);
 
-        emit Refunded(commitId, msg.sender, commit.token, commit.stake);
+        emit Refunded(commitId, msg.sender, commit.token, amount);
     }
 
     function verifyOverride(uint256 commitId, address participant) public onlyOwner {
