@@ -6,6 +6,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 // A signature can be created off-chain by a trusted service
+
 contract SignatureVerifier is IVerifier {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
@@ -19,15 +20,12 @@ contract SignatureVerifier is IVerifier {
         returns (bool)
     {
         address signer = abi.decode(data, (address));
-        (uint256 timestamp, uint256 commitId, bytes memory signature) =
-            abi.decode(userdata, (uint256, uint256, bytes));
-
+        (uint256 timestamp, uint256 commitId, bytes memory signature) = abi.decode(userdata, (uint256, uint256, bytes));
         // Ensure the timestamp is not in the future
         require(timestamp <= block.timestamp, "Invalid future timestamp");
 
         // Ensure the signature hasn't expired
         require(block.timestamp <= timestamp + SIGNATURE_EXPIRY, "Signature expired");
-
         // Compute the hash locally using the input parameters
         bytes32 hash = keccak256(abi.encodePacked(participant, timestamp, commitId));
 
