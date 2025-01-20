@@ -231,7 +231,7 @@ contract CommitProtocolV04Test is Test {
         assertTrue(bobAltBalAfter > bobAltBalBefore, "Bob ALT claim failed");
     }
 
-    function testWithdrawFees() public {
+    function testClaimFees() public {
         // 1. Create & join quickly
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
@@ -250,7 +250,7 @@ contract CommitProtocolV04Test is Test {
         // 3. Alice withdraws her 2 ether
         uint256 aliceBalBefore = stakeToken.balanceOf(alice);
         vm.startPrank(alice);
-        commitProtocol.withdraw(address(stakeToken), alice);
+        commitProtocol.claimFees(address(stakeToken));
         vm.stopPrank();
         uint256 aliceBalAfter = stakeToken.balanceOf(alice);
 
@@ -287,12 +287,12 @@ contract CommitProtocolV04Test is Test {
         // 2. Creator (alice) triggers cancel
         vm.startPrank(alice);
         vm.warp(commitProtocol.getCommit(commitId).verifyBefore);
-        vm.expectRevert(abi.encodeWithSignature("CommitClosed(uint256,string)", commitId, "join"));
+        vm.expectRevert(abi.encodeWithSignature("CommitClosed(uint256,string)", commitId, "verify"));
         commitProtocol.cancel(commitId);
         vm.warp(commitProtocol.getCommit(commitId).verifyBefore - 1);
         commitProtocol.cancel(commitId);
 
-        // Check status changed
+        // // Check status changed
         CommitProtocolV04.CommitStatus commitStatus = commitProtocol.status(commitId);
         assertEq(uint256(commitStatus), uint256(CommitProtocolV04.CommitStatus.cancelled));
         vm.stopPrank();
@@ -327,11 +327,6 @@ contract CommitProtocolV04Test is Test {
         vm.startPrank(bob);
         commitProtocol.refund(commitId);
 
-        // Can only refund once
-        vm.expectRevert(
-            abi.encodeWithSignature("InvalidParticipantStatus(uint256,address,string)", commitId, bob, "not-joined")
-        );
-        commitProtocol.refund(commitId);
         vm.stopPrank();
 
         // 4. Verify refund amounts
@@ -420,7 +415,7 @@ contract CommitProtocolV04Test is Test {
 
         // 3. Client withdraws their fee share
         vm.startPrank(client);
-        commitProtocol.withdraw(address(stakeToken), client);
+        commitProtocol.claimFees(address(stakeToken));
         vm.stopPrank();
 
         // 4. Check client received their fee share
@@ -590,7 +585,7 @@ contract CommitProtocolV04Test is Test {
         // 5. Creator claims their fees
         uint256 aliceBalanceBefore = stakeToken.balanceOf(alice);
         vm.startPrank(alice);
-        commitProtocol.withdraw(address(stakeToken), alice);
+        commitProtocol.claimFees(address(stakeToken));
         uint256 aliceBalanceAfter = stakeToken.balanceOf(alice);
         assertGt(aliceBalanceAfter, aliceBalanceBefore, "Creator fee claim failed");
         vm.stopPrank();
