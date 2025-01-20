@@ -223,8 +223,18 @@ contract CommitProtocolV04 is
             }
         }
 
-        // Pay protocol join fee in ETH
-        TokenUtils.transferFrom(address(0), msg.sender, config.fee.recipient, config.fee.fee);
+        // Handle ETH (needed because TokenUtils check msg.value == amou t)
+        if (commit.token == address(0)) {
+            uint256 amount = commit.stake + commit.fee + config.fee.fee;
+            require(msg.value == amount, "Incorrect ETH amount sent");
+            (bool success,) = payable(address(this)).call{value: amount}("");
+            require(success, "ETH transfer failed");
+        } else {
+            // Pay protocol join fee in ETH
+            TokenUtils.transferFrom(address(0), msg.sender, config.fee.recipient, config.fee.fee);
+            // Transfer stake + creator fee to this contract
+            TokenUtils.transferFrom(commit.token, msg.sender, address(this), commit.stake + commit.fee);
+        }
 
         // Add participant stake
         funds[commit.token][commitId] += commit.stake;
@@ -232,9 +242,6 @@ contract CommitProtocolV04 is
 
         // Set aside creator fee to claims
         claims[commit.token][commit.creator] += commit.fee;
-
-        // Transfer stake + creator fee to this contract
-        TokenUtils.transferFrom(commit.token, msg.sender, address(this), commit.stake + commit.fee);
 
         // Mint an ERC1155 token representing this commit for the participant
         _mint(msg.sender, commitId, 1, "");
