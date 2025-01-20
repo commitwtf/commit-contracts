@@ -48,6 +48,7 @@ contract CommitProtocolV04Test is Test {
 
         // Store the config in the contract
         commitProtocol.setProtocolConfig(config);
+        commitProtocol.setURI("https://new.example.com/{id}.json");
 
         // 3. Deploy and mint mock tokens
         stakeToken = new ERC20Mock();
@@ -185,6 +186,46 @@ contract CommitProtocolV04Test is Test {
         assertApproxEqRel(bobBalanceAfter - bobBalanceBefore, 9 ether, 1e16, "Bob's staked return not as expected");
     }
 
+    function testFundAndWithdraw() public {
+        // 1. Alice creates a commit
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
+        vm.stopPrank();
+
+        // 2. Bob funds the commit
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        commitProtocol.fund(commitId, address(stakeToken), 50 ether);
+
+        // Verify funding
+        uint256 bobFundedAmount = commitProtocol.fundsByAddress(address(stakeToken), commitId, bob);
+        uint256 totalFunds = commitProtocol.funds(address(stakeToken), commitId);
+        assertEq(bobFundedAmount, 50 ether, "Bob's funded amount mismatch");
+        assertEq(totalFunds, 50 ether, "Total funds mismatch");
+
+        vm.stopPrank();
+
+        // 3. Bob withdraws the funds before the join period ends
+        vm.startPrank(bob);
+
+        // Withdraw the funded amount
+        commitProtocol.withdraw(commitId, address(stakeToken));
+
+        // Attempt to withdraw more than funded, expect revert
+        vm.expectRevert(abi.encodeWithSignature("InsufficientAmount()"));
+        commitProtocol.withdraw(commitId, address(stakeToken));
+
+        // Verify withdrawal
+        uint256 bobBalanceAfterWithdraw = stakeToken.balanceOf(bob);
+        assertEq(bobBalanceAfterWithdraw, 1000 ether, "Bob's balance after withdrawal mismatch");
+
+        uint256 remainingFunds = commitProtocol.funds(address(stakeToken), commitId);
+        assertEq(remainingFunds, 0, "Remaining funds mismatch");
+
+        vm.stopPrank();
+    }
+
     function testFundAndClaimMultipleTokens() public {
         // 1. Create commit
         vm.startPrank(alice);
@@ -197,6 +238,11 @@ contract CommitProtocolV04Test is Test {
         stakeToken.approve(address(commitProtocol), type(uint256).max);
         vm.deal(bob, 1 ether);
         commitProtocol.join{value: 0.01 ether}(commitId, "");
+
+        // Test trying to withdraw stake
+        vm.expectRevert(abi.encodeWithSignature("InsufficientAmount()"));
+        commitProtocol.withdraw(commitId, address(stakeToken));
+
         vm.stopPrank();
 
         // 3. Alice funds the commit with altToken
@@ -228,6 +274,7 @@ contract CommitProtocolV04Test is Test {
 
         vm.startPrank(bob);
         commitProtocol.claim(commitId, bob);
+
         vm.stopPrank();
         uint256 bobStakeBalAfter = stakeToken.balanceOf(bob);
         uint256 bobAltBalAfter = altToken.balanceOf(bob);
@@ -715,6 +762,35 @@ contract CommitProtocolV04Test is Test {
         // 6. Verify operations resume
         vm.startPrank(charlie);
         commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+    }
+
+    function testGetCommitTokensAndSetURI() public {
+        // 1. Setup: Alice creates a commit with stakeToken.
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+
+        CommitProtocolV04.Commit memory newCommit = createCommit(address(stakeToken));
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(newCommit);
+
+        // 2. Alice also funds this commit with altToken to ensure multiple tokens are tracked.
+        altToken.approve(address(commitProtocol), type(uint256).max);
+        commitProtocol.fund(commitId, address(altToken), 50 ether);
+
+        // 3. Check getCommitTokens to cover the uncovered lines.
+        address[] memory tokensUsed = commitProtocol.getCommitTokens(commitId);
+        // Expect two tokens: stakeToken and altToken.
+        assertEq(tokensUsed.length, 2, "Should have exactly two tokens in commitTokens");
+        // Order depends on the set insertion, so just confirm presence:
+        bool hasStakeToken;
+        bool hasAltToken;
+        for (uint256 i = 0; i < tokensUsed.length; i++) {
+            if (tokensUsed[i] == address(stakeToken)) hasStakeToken = true;
+            if (tokensUsed[i] == address(altToken)) hasAltToken = true;
+        }
+        assertTrue(hasStakeToken, "stakeToken not found in commitTokens");
+        assertTrue(hasAltToken, "altToken not found in commitTokens");
+
         vm.stopPrank();
     }
 }

@@ -309,6 +309,10 @@ contract CommitProtocolV04 is
             amount -= commit.stake;
         }
 
+        if (amount == 0) {
+            revert InsufficientAmount();
+        }
+
         funds[token][commitId] -= amount;
         fundsByAddress[token][commitId][msg.sender] -= amount;
 
