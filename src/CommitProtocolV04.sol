@@ -272,7 +272,7 @@ contract CommitProtocolV04 is
     /**
      * @notice Allows funders to withdraw funded tokens
      */
-    function withdraw(uint256 commitId, address token, uint256 amount)
+    function withdraw(uint256 commitId, address token)
         public
         payable
         whenNotPaused
@@ -287,6 +287,7 @@ contract CommitProtocolV04 is
             revert CommitClosed(commitId, "join");
         }
 
+        uint256 amount = fundsByAddress[token][commitId][msg.sender];
         funds[token][commitId] -= amount;
         fundsByAddress[token][commitId][msg.sender] -= amount;
 
