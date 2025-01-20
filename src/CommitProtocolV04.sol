@@ -378,24 +378,26 @@ contract CommitProtocolV04 is
             revert CommitClosed(commitId, "verify still open");
         }
 
-        // Stake + funding
         uint256 amount = funds[token][commitId];
-        funds[token][commitId] = 0;
 
-        // Allocate shares to client and protocol
+        // If no participants succeeded, just mark commit as cancelled
+        // and let participants/funders call `refund()`. Skip fees entirely.
+        if (verifiedCount[commitId] == 0) {
+            status[commitId] = CommitStatus.cancelled;
+            return;
+        }
+
+        // Otherwise, proceed with normal distribution
+        funds[token][commitId] = 0;
         uint256 clientShare = (amount * commit.client.shareBps) / 10000;
         uint256 protocolShare = (amount * config.fee.shareBps) / 10000;
-
-        // The remainder is split equally among verified participants
         uint256 rewardsPool = amount - clientShare - protocolShare;
 
-        if (verifiedCount[commitId] > 0) {
-            // Update rewards to claim for each verified participant
-            rewards[token][commitId] = rewardsPool / verifiedCount[commitId];
+        // Each verified participant’s share
+        rewards[token][commitId] = rewardsPool / verifiedCount[commitId];
 
-            // Add any rounding remainder to protocol
-            protocolShare += rewardsPool % verifiedCount[commitId];
-        }
+        // Any rounding remainder goes to protocol
+        protocolShare += (rewardsPool % verifiedCount[commitId]);
 
         // Update claims
         claims[token][commit.client.recipient] += clientShare;
