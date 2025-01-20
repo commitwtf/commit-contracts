@@ -9,6 +9,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IVerifier} from "../src/interfaces/IVerifier.sol";
 import {ERC20Mock} from "../src/mocks/ERC20Mock.sol";
 import {MockVerifier} from "../src/mocks/VerifierMock.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract CommitProtocolV04Test is Test {
     CommitProtocolV04 internal commitProtocol;
@@ -28,11 +30,24 @@ contract CommitProtocolV04Test is Test {
     // We'll store a created commitId for tests
     uint256 internal createdCommitId;
 
+    // Add upgrade-specific variables
+    CommitProtocolV04 public implementationV2;
+
     function setUp() public {
-        // 1. Deploy the protocol contract as an upgradeable base (UUPS).
+        // 1. Deploy implementation and proxy
         vm.startPrank(protocolOwner);
-        commitProtocol = new CommitProtocolV04();
-        commitProtocol.initialize(protocolOwner);
+        CommitProtocolV04 implementation = new CommitProtocolV04();
+        
+        bytes memory initData = abi.encodeWithSelector(
+            CommitProtocolV04.initialize.selector,
+            protocolOwner
+        );
+        
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(implementation),
+            initData
+        );
+        commitProtocol = CommitProtocolV04(address(proxy));
 
         verifier = new MockVerifier();
         // 2. Configure protocol fees
@@ -793,6 +808,181 @@ contract CommitProtocolV04Test is Test {
 
         vm.stopPrank();
     }
+
+    function testUpgradePreservesState() public {
+        // Store pre-upgrade state
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
+        vm.stopPrank();
+
+        // Join with bob
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+        
+        // Store pre-upgrade state
+        CommitProtocolV04.Commit memory preUpgradeCommit = commitProtocol.getCommit(commitId);
+        uint256 preUpgradeBalance = commitProtocol.funds(address(stakeToken), commitId);
+        
+        // Store protocol config and approved tokens
+        (uint256 preMaxDuration, string memory preBaseURI, CommitProtocolV04.ProtocolFee memory preFee) = commitProtocol.config();
+        CommitProtocolV04.ProtocolConfig memory preUpgradeConfig = CommitProtocolV04.ProtocolConfig({
+            maxCommitDuration: preMaxDuration,
+            baseURI: preBaseURI,
+            fee: preFee
+        });
+        address[] memory preUpgradeApprovedTokens = commitProtocol.getApprovedTokens();
+
+        // Perform upgrade
+        vm.startPrank(protocolOwner);
+        implementationV2 = new CommitProtocolV04();
+        UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
+        vm.stopPrank();
+        
+        // Verify state preserved
+        CommitProtocolV04.Commit memory postUpgradeCommit = commitProtocol.getCommit(commitId);
+        assertEq(preUpgradeCommit.token, postUpgradeCommit.token);
+        assertEq(preUpgradeBalance, commitProtocol.funds(address(stakeToken), commitId));
+    }
+
+    function testUpgradeAccessControl() public {
+        implementationV2 = new CommitProtocolV04();
+        
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", alice));
+        UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
+        vm.stopPrank();
+        
+        vm.startPrank(protocolOwner);
+        UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
+        vm.stopPrank();
+    }
+
+    function testUpgradeWithMultipleCommitsAndStates() public {
+        (uint256 commitId1, uint256 commitId2) = _setupCommitsForUpgradeTest();
+        _verifyPreUpgradeState(commitId1, commitId2);
+        _performUpgrade();
+        _verifyPostUpgradeState(commitId1, commitId2);
+    }
+
+    function _setupCommitsForUpgradeTest() internal returns (uint256 commitId1, uint256 commitId2) {
+        // 1. Create multiple commits with different states
+        vm.startPrank(alice);
+        vm.deal(alice, 10 ether);
+        
+        // First commit: Created and joined
+        commitId1 = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
+        
+        // Second commit: Created, joined, and verified
+        commitId2 = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
+        vm.stopPrank();
+
+        // Bob joins both commits
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 10 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId1, "");
+        commitProtocol.join{value: 0.01 ether}(commitId2, "");
+        vm.stopPrank();
+
+        // Verify bob in commit2
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.startPrank(alice);
+        commitProtocol.verify(commitId2, bob, "");
+        vm.stopPrank();
+    }
+
+    function _verifyPreUpgradeState(uint256 commitId1, uint256 commitId2) internal {
+        // Store pre-upgrade state
+        CommitProtocolV04.Commit memory preUpgradeCommit1 = commitProtocol.getCommit(commitId1);
+        CommitProtocolV04.Commit memory preUpgradeCommit2 = commitProtocol.getCommit(commitId2);
+        CommitProtocolV04.ParticipantStatus preUpgradeStatus1 = commitProtocol.participants(commitId1, bob);
+        CommitProtocolV04.ParticipantStatus preUpgradeStatus2 = commitProtocol.participants(commitId2, bob);
+        uint256 preUpgradeBalance1 = commitProtocol.funds(address(stakeToken), commitId1);
+        uint256 preUpgradeBalance2 = commitProtocol.funds(address(stakeToken), commitId2);
+        
+        // Store protocol config and approved tokens
+        (uint256 preMaxDuration, string memory preBaseURI, CommitProtocolV04.ProtocolFee memory preFee) = commitProtocol.config();
+        address[] memory preUpgradeApprovedTokens = commitProtocol.getApprovedTokens();
+
+        // Store values in storage for later comparison
+        s_preUpgradeCommit1 = preUpgradeCommit1;
+        s_preUpgradeCommit2 = preUpgradeCommit2;
+        s_preUpgradeStatus1 = preUpgradeStatus1;
+        s_preUpgradeStatus2 = preUpgradeStatus2;
+        s_preUpgradeBalance1 = preUpgradeBalance1;
+        s_preUpgradeBalance2 = preUpgradeBalance2;
+        s_preMaxDuration = preMaxDuration;
+        s_preBaseURI = preBaseURI;
+        s_preFee = preFee;
+        s_preUpgradeApprovedTokens = preUpgradeApprovedTokens;
+    }
+
+    function _performUpgrade() internal {
+        vm.startPrank(protocolOwner);
+        implementationV2 = new CommitProtocolV04();
+        UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
+        vm.stopPrank();
+    }
+
+    function _verifyPostUpgradeState(uint256 commitId1, uint256 commitId2) internal {
+        // Verify all state is preserved
+        CommitProtocolV04.Commit memory postUpgradeCommit1 = commitProtocol.getCommit(commitId1);
+        CommitProtocolV04.Commit memory postUpgradeCommit2 = commitProtocol.getCommit(commitId2);
+        
+        // Check commit details preserved
+        assertEq(s_preUpgradeCommit1.token, postUpgradeCommit1.token, "Commit1 token mismatch");
+        assertEq(s_preUpgradeCommit2.token, postUpgradeCommit2.token, "Commit2 token mismatch");
+        
+        // Check participant statuses preserved
+        CommitProtocolV04.ParticipantStatus postStatus1 = commitProtocol.participants(commitId1, bob);
+        CommitProtocolV04.ParticipantStatus postStatus2 = commitProtocol.participants(commitId2, bob);
+        
+        assertEq(
+            uint256(s_preUpgradeStatus1),
+            uint256(postStatus1),
+            "Participant status 1 mismatch"
+        );
+        assertEq(
+            uint256(s_preUpgradeStatus2),
+            uint256(postStatus2),
+            "Participant status 2 mismatch"
+        );
+        
+        // Check balances preserved
+        assertEq(s_preUpgradeBalance1, commitProtocol.funds(address(stakeToken), commitId1), "Balance 1 mismatch");
+        assertEq(s_preUpgradeBalance2, commitProtocol.funds(address(stakeToken), commitId2), "Balance 2 mismatch");
+        
+        // Check protocol config preserved
+        (uint256 postMaxDuration, string memory postBaseURI, CommitProtocolV04.ProtocolFee memory postFee) = commitProtocol.config();
+        assertEq(s_preMaxDuration, postMaxDuration, "Max duration mismatch");
+        assertEq(s_preBaseURI, postBaseURI, "Base URI mismatch");
+        assertEq(s_preFee.fee, postFee.fee, "Fee mismatch");
+        assertEq(s_preFee.recipient, postFee.recipient, "Fee recipient mismatch");
+        assertEq(s_preFee.shareBps, postFee.shareBps, "Fee share mismatch");
+        
+        // Check approved tokens preserved
+        address[] memory postUpgradeApprovedTokens = commitProtocol.getApprovedTokens();
+        assertEq(s_preUpgradeApprovedTokens.length, postUpgradeApprovedTokens.length, "Approved tokens length mismatch");
+        for (uint256 i = 0; i < s_preUpgradeApprovedTokens.length; i++) {
+            assertEq(s_preUpgradeApprovedTokens[i], postUpgradeApprovedTokens[i], "Approved token mismatch");
+        }
+    }
+
+    // Storage variables for upgrade test state
+    CommitProtocolV04.Commit internal s_preUpgradeCommit1;
+    CommitProtocolV04.Commit internal s_preUpgradeCommit2;
+    CommitProtocolV04.ParticipantStatus internal s_preUpgradeStatus1;
+    CommitProtocolV04.ParticipantStatus internal s_preUpgradeStatus2;
+    uint256 internal s_preUpgradeBalance1;
+    uint256 internal s_preUpgradeBalance2;
+    uint256 internal s_preMaxDuration;
+    string internal s_preBaseURI;
+    CommitProtocolV04.ProtocolFee internal s_preFee;
+    address[] internal s_preUpgradeApprovedTokens;
 }
 // Helper contract for testing verification failures
 
