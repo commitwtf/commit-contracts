@@ -95,7 +95,6 @@ contract CommitProtocolV04 is
 
     enum CommitStatus {
         created,
-        resolved,
         cancelled
     }
 
@@ -378,9 +377,6 @@ contract CommitProtocolV04 is
         if (block.timestamp <= commit.verifyBefore) {
             revert CommitClosed(commitId, "verify still open");
         }
-        if (verifiedCount[commitId] == 0) {
-            revert NoVerified(commitId);
-        }
 
         // Stake + funding
         uint256 amount = funds[token][commitId];
@@ -393,11 +389,13 @@ contract CommitProtocolV04 is
         // The remainder is split equally among verified participants
         uint256 rewardsPool = amount - clientShare - protocolShare;
 
-        // Update rewards to claim for each verified participant
-        rewards[token][commitId] = rewardsPool / verifiedCount[commitId];
+        if (verifiedCount[commitId] > 0) {
+            // Update rewards to claim for each verified participant
+            rewards[token][commitId] = rewardsPool / verifiedCount[commitId];
 
-        // Add any rounding remainder to protocol
-        protocolShare += rewardsPool % verifiedCount[commitId];
+            // Add any rounding remainder to protocol
+            protocolShare += rewardsPool % verifiedCount[commitId];
+        }
 
         // Update claims
         claims[token][commit.client.recipient] += clientShare;
