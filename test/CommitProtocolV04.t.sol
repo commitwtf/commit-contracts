@@ -1145,6 +1145,48 @@ contract CommitProtocolV04Test is Test {
         uint256 aliceBalanceAfter = stakeToken.balanceOf(alice);
         assertTrue(aliceBalanceAfter > aliceBalanceBefore, "Fee claim after upgrade failed");
     }
+
+    function testEmergencyWithdraw() public {
+        // Setup: Deploy and fund the contract
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
+        vm.stopPrank();
+
+        // Bob joins and stakes tokens
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // Record initial balances
+        uint256 initialContractBalance = stakeToken.balanceOf(address(commitProtocol));
+        uint256 initialOwnerBalance = stakeToken.balanceOf(protocolOwner);
+
+        // Test non-owner cannot withdraw
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", alice));
+        commitProtocol.emergencyWithdraw(address(stakeToken), initialContractBalance);
+        vm.stopPrank();
+
+        // Test owner can withdraw without pausing
+        vm.startPrank(protocolOwner);
+        commitProtocol.emergencyWithdraw(address(stakeToken), initialContractBalance);
+
+        // Verify balances
+        assertEq(
+            stakeToken.balanceOf(address(commitProtocol)), 
+            0, 
+            "Contract should have 0 balance after emergency withdraw"
+        );
+        assertEq(
+            stakeToken.balanceOf(protocolOwner), 
+            initialOwnerBalance + initialContractBalance,
+            "Owner should receive withdrawn tokens"
+        );
+        vm.stopPrank();
+    }
 }
 
 // Helper contract for testing verification failures
