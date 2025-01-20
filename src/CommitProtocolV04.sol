@@ -201,6 +201,9 @@ contract CommitProtocolV04 is
         if (status[commitId] != CommitStatus.created) {
             revert InvalidCommitStatus(commitId, "not-created");
         }
+        if (status[commitId] == CommitStatus.cancelled) {
+            revert InvalidCommitStatus(commitId, "cancelled");
+        }
         if (block.timestamp >= commit.joinBefore) {
             revert CommitClosed(commitId, "join");
         }
@@ -263,6 +266,9 @@ contract CommitProtocolV04 is
         if (status[commitId] != CommitStatus.created) {
             revert InvalidCommitStatus(commitId, "not-created");
         }
+        if (status[commitId] == CommitStatus.cancelled) {
+            revert InvalidCommitStatus(commitId, "cancelled");
+        }
         if (block.timestamp >= commit.verifyBefore) {
             revert CommitClosed(commitId, "verify");
         }
@@ -287,8 +293,8 @@ contract CommitProtocolV04 is
         onlyApprovedToken(token)
     {
         Commit memory commit = getCommit(commitId);
-        if (status[commitId] != CommitStatus.created) {
-            revert InvalidCommitStatus(commitId, "not-created");
+        if (status[commitId] != CommitStatus.created && status[commitId] != CommitStatus.cancelled) {
+            revert InvalidCommitStatus(commitId, "must be created or cancelled");
         }
         if (block.timestamp >= commit.joinBefore) {
             revert CommitClosed(commitId, "join");
@@ -324,6 +330,9 @@ contract CommitProtocolV04 is
         if (status[commitId] != CommitStatus.created) {
             revert InvalidCommitStatus(commitId, "not-created");
         }
+        if (status[commitId] == CommitStatus.cancelled) {
+            revert InvalidCommitStatus(commitId, "cancelled");
+        }
         if (block.timestamp >= c.verifyBefore) {
             revert CommitClosed(commitId, "verify");
         }
@@ -348,6 +357,9 @@ contract CommitProtocolV04 is
      *         proportionally among verified users (minus protocol/client fees).
      */
     function claim(uint256 commitId, address participant) public payable nonReentrant {
+        if (status[commitId] == CommitStatus.cancelled) {
+            revert InvalidCommitStatus(commitId, "cancelled");
+        }
         if (participants[commitId][participant] != ParticipantStatus.verified) {
             revert InvalidParticipantStatus(commitId, participant, "not-verified");
         }
