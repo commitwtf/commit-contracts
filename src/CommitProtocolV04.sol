@@ -342,13 +342,16 @@ contract CommitProtocolV04 is
         if (participants[commitId][participant] != ParticipantStatus.joined) {
             revert InvalidParticipantStatus(commitId, participant, "not-joined");
         }
+        // Update state before calling verifier (could be an untrusted verifier contract)
+        participants[commitId][participant] = ParticipantStatus.verified;
+        verifiedCount[commitId]++;
         // Use fulfillVerifier to check if participant truly completed the commit
         bool ok = IVerifier(c.fulfillVerifier.target).verify(participant, c.fulfillVerifier.data, data);
 
-        // If successful, mark them as verified
-        if (ok) {
-            participants[commitId][participant] = ParticipantStatus.verified;
-            verifiedCount[commitId]++;
+        // If verification fails, revert the state changes
+        if (!ok) {
+            participants[commitId][participant] = ParticipantStatus.joined;
+            verifiedCount[commitId]--;
         }
 
         emit Verified(commitId, participant, ok);
