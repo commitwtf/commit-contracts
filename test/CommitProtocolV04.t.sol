@@ -983,7 +983,170 @@ contract CommitProtocolV04Test is Test {
     string internal s_preBaseURI;
     CommitProtocolV04.ProtocolFee internal s_preFee;
     address[] internal s_preUpgradeApprovedTokens;
+
+    function testUpgradeInitialization() public {
+        // Setup initial state
+        vm.startPrank(protocolOwner);
+        commitProtocol.setURI("test-uri");
+        commitProtocol.pause();
+        vm.stopPrank();
+
+        // Store pre-upgrade state that depends on initializers
+        bool preUpgradePaused = commitProtocol.paused();
+        string memory preUpgradeURI = commitProtocol.uri(1);
+        address preUpgradeOwner = commitProtocol.owner();
+
+        // Perform upgrade
+        vm.startPrank(protocolOwner);
+        implementationV2 = new CommitProtocolV04();
+        UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
+        vm.stopPrank();
+
+        // Verify all initialized state is preserved
+        assertEq(commitProtocol.paused(), preUpgradePaused, "Pause state not preserved");
+        assertEq(commitProtocol.uri(1), preUpgradeURI, "URI not preserved");
+        assertEq(commitProtocol.owner(), preUpgradeOwner, "Owner not preserved");
+        
+        // Verify initialized functions still work
+        vm.startPrank(protocolOwner);
+        commitProtocol.unpause();
+        assertFalse(commitProtocol.paused(), "Pause functionality broken after upgrade");
+        vm.stopPrank();
+    }
+
+    function testUpgradeStorageLayout() public {
+        // Setup complex state with multiple storage slots
+        vm.startPrank(protocolOwner);
+        
+        // Update protocol config (first storage slot)
+        CommitProtocolV04.ProtocolConfig memory newConfig = CommitProtocolV04.ProtocolConfig({
+            maxCommitDuration: 60 days,
+            baseURI: "new-uri",
+            fee: CommitProtocolV04.ProtocolFee({
+                recipient: address(0x9999),
+                fee: 0.02 ether,
+                shareBps: 1000
+            })
+        });
+        commitProtocol.setProtocolConfig(newConfig);
+        
+        // Add approved tokens (different storage slot)
+        address newToken = address(0x8888);
+        commitProtocol.approveToken(newToken, true);
+        vm.stopPrank();
+        
+        // Create commit to test mappings
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.02 ether}(createCommit(address(stakeToken)));
+        vm.stopPrank();
+
+        // Store pre-upgrade state from different storage slots
+        (uint256 preMaxDuration, string memory preBaseURI, CommitProtocolV04.ProtocolFee memory preFee) = commitProtocol.config();
+        address[] memory preApprovedTokens = commitProtocol.getApprovedTokens();
+        CommitProtocolV04.Commit memory preCommit = commitProtocol.getCommit(commitId);
+        uint256 preCommitIds = commitProtocol.commitIds();
+
+        // Perform upgrade
+        vm.startPrank(protocolOwner);
+        implementationV2 = new CommitProtocolV04();
+        UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
+        vm.stopPrank();
+
+        // Verify all storage slots maintained their values
+        (uint256 postMaxDuration, string memory postBaseURI, CommitProtocolV04.ProtocolFee memory postFee) = commitProtocol.config();
+        address[] memory postApprovedTokens = commitProtocol.getApprovedTokens();
+        CommitProtocolV04.Commit memory postCommit = commitProtocol.getCommit(commitId);
+        uint256 postCommitIds = commitProtocol.commitIds();
+
+        // Assert storage layout is preserved
+        assertEq(postMaxDuration, preMaxDuration, "Config maxDuration not preserved");
+        assertEq(postBaseURI, preBaseURI, "Config baseURI not preserved");
+        assertEq(postFee.fee, preFee.fee, "Config fee not preserved");
+        assertEq(postFee.recipient, preFee.recipient, "Config recipient not preserved");
+        assertEq(postFee.shareBps, preFee.shareBps, "Config shareBps not preserved");
+        assertEq(postApprovedTokens.length, preApprovedTokens.length, "Approved tokens length not preserved");
+        assertEq(postCommit.creator, preCommit.creator, "Commit creator not preserved");
+        assertEq(postCommitIds, preCommitIds, "CommitIds not preserved");
+    }
+
+    function testUpgradeWithPendingDistributions() public {
+        // Setup: Create commit and get participants
+        vm.startPrank(alice);
+        vm.deal(alice, 1 ether);
+        uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
+        vm.stopPrank();
+
+        // Bob and Charlie join
+        address charlie = address(0x4444);
+        vm.startPrank(bob);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(bob, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        vm.startPrank(charlie);
+        stakeToken.mint(charlie, 1000 ether);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        vm.deal(charlie, 1 ether);
+        commitProtocol.join{value: 0.01 ether}(commitId, "");
+        vm.stopPrank();
+
+        // Add some additional funding
+        vm.startPrank(alice);
+        stakeToken.approve(address(commitProtocol), type(uint256).max);
+        commitProtocol.fund(commitId, address(stakeToken), 50 ether);
+        vm.stopPrank();
+
+        // Verify participants but don't distribute yet
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.startPrank(alice);
+        commitProtocol.verify(commitId, bob, "");
+        commitProtocol.verify(commitId, charlie, "");
+        vm.stopPrank();
+
+        // Store pre-upgrade state
+        uint256 preUpgradeFunds = commitProtocol.funds(address(stakeToken), commitId);
+        uint256 preUpgradeVerifiedCount = commitProtocol.verifiedCount(commitId);
+        uint256 preUpgradeCreatorClaims = commitProtocol.claims(address(stakeToken), alice);
+        uint256 preUpgradeProtocolClaims = commitProtocol.claims(address(stakeToken), protocolFeeRecipient);
+        uint256 preUpgradeClientClaims = commitProtocol.claims(address(stakeToken), client);
+
+        // Perform upgrade
+        vm.startPrank(protocolOwner);
+        implementationV2 = new CommitProtocolV04();
+        UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
+        vm.stopPrank();
+
+        // Verify post-upgrade state
+        assertEq(commitProtocol.funds(address(stakeToken), commitId), preUpgradeFunds, "Funds not preserved");
+        assertEq(commitProtocol.verifiedCount(commitId), preUpgradeVerifiedCount, "Verified count not preserved");
+        assertEq(commitProtocol.claims(address(stakeToken), alice), preUpgradeCreatorClaims, "Creator claims not preserved");
+        assertEq(commitProtocol.claims(address(stakeToken), protocolFeeRecipient), preUpgradeProtocolClaims, "Protocol claims not preserved");
+        assertEq(commitProtocol.claims(address(stakeToken), client), preUpgradeClientClaims, "Client claims not preserved");
+
+        // Verify distribution still works after upgrade
+        vm.warp(block.timestamp + 1 days);
+        commitProtocol.distribute(commitId, address(stakeToken));
+
+        // Verify participants can still claim
+        uint256 bobBalanceBefore = stakeToken.balanceOf(bob);
+        vm.startPrank(bob);
+        commitProtocol.claim(commitId, bob);
+        vm.stopPrank();
+        uint256 bobBalanceAfter = stakeToken.balanceOf(bob);
+        assertTrue(bobBalanceAfter > bobBalanceBefore, "Claim after upgrade failed");
+
+        // Verify fee recipients can claim
+        uint256 aliceBalanceBefore = stakeToken.balanceOf(alice);
+        vm.startPrank(alice);
+        commitProtocol.claimFees(address(stakeToken));
+        vm.stopPrank();
+        uint256 aliceBalanceAfter = stakeToken.balanceOf(alice);
+        assertTrue(aliceBalanceAfter > aliceBalanceBefore, "Fee claim after upgrade failed");
+    }
 }
+
 // Helper contract for testing verification failures
 
 contract FailingMockVerifier is IVerifier {
