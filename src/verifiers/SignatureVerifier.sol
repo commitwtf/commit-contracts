@@ -19,14 +19,16 @@ contract SignatureVerifier is IVerifier {
         returns (bool)
     {
         address signer = abi.decode(data, (address));
-        (bytes32 hash, uint256 timestamp, uint256 commitId, bytes memory signature) =
-            abi.decode(userdata, (bytes32, uint256, uint256, bytes));
+        (uint256 timestamp, uint256 commitId, bytes memory signature) =
+            abi.decode(userdata, (uint256, uint256, bytes));
 
         // Ensure the signature hasn't expired
         require(block.timestamp <= timestamp + SIGNATURE_EXPIRY, "Signature expired");
 
-        // Verify signed hash contains participant, correct timestamp and commitId
-        require(hash == keccak256(abi.encodePacked(participant, timestamp, commitId)), "Hash mismatch");
+        // Compute the hash locally using the input parameters
+        bytes32 hash = keccak256(abi.encodePacked(participant, timestamp, commitId));
+
+        // Verify the signature matches the computed hash
         return hash.toEthSignedMessageHash().recover(signature) == signer;
     }
 }
