@@ -484,7 +484,7 @@ contract CommitProtocol is
      * @notice Returns the details of a specific commit by ID.
      */
     function getCommit(uint256 commitId) public view returns (Commit memory commit) {
-        require(commitId <= commitIds, "Commit not found");
+        require(commitId > 0 && commitId <= commitIds, "Commit not found");
         return commits[commitId];
     }
 
