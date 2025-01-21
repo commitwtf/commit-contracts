@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {CommitProtocolV04} from "../src/CommitProtocolV04.sol";
+import {CommitProtocol} from "../src/CommitProtocol.sol";
 import {SignatureVerifier} from "../src/verifiers/SignatureVerifier.sol";
 import {TokenUtils} from "../src/libraries/TokenUtils.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -12,8 +12,8 @@ import {MockVerifier} from "../src/mocks/VerifierMock.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-contract CommitProtocolV04Test is Test {
-    CommitProtocolV04 internal commitProtocol;
+contract CommitProtocolTest is Test {
+    CommitProtocol internal commitProtocol;
     MockVerifier internal verifier;
     ERC20Mock internal stakeToken;
     ERC20Mock internal altToken;
@@ -25,21 +25,21 @@ contract CommitProtocolV04Test is Test {
     address internal client = address(0xBEEF);
 
     // Example: protocol config
-    CommitProtocolV04.ProtocolConfig internal config;
+    CommitProtocol.ProtocolConfig internal config;
 
     // We'll store a created commitId for tests
     uint256 internal createdCommitId;
 
     // Add upgrade-specific variables
-    CommitProtocolV04 public implementationV2;
+    CommitProtocol public implementationV2;
 
     function setUp() public {
         // 1. Deploy implementation and proxy
         vm.startPrank(protocolOwner);
-        CommitProtocolV04 implementation = new CommitProtocolV04();
+        CommitProtocol implementation = new CommitProtocol();
         
         bytes memory initData = abi.encodeWithSelector(
-            CommitProtocolV04.initialize.selector,
+            CommitProtocol.initialize.selector,
             protocolOwner
         );
         
@@ -47,14 +47,14 @@ contract CommitProtocolV04Test is Test {
             address(implementation),
             initData
         );
-        commitProtocol = CommitProtocolV04(address(proxy));
+        commitProtocol = CommitProtocol(address(proxy));
 
         verifier = new MockVerifier();
         // 2. Configure protocol fees
-        config = CommitProtocolV04.ProtocolConfig({
+        config = CommitProtocol.ProtocolConfig({
             maxCommitDuration: 30 days,
             baseURI: "https://example.com/",
-            fee: CommitProtocolV04.ProtocolFee({
+            fee: CommitProtocol.ProtocolFee({
                 recipient: protocolFeeRecipient,
                 fee: 0.01 ether, // protocol creation/join fee in ETH
                 shareBps: 500 // 5%
@@ -90,7 +90,7 @@ contract CommitProtocolV04Test is Test {
         vm.deal(alice, 1 ether); // give Alice some ETH to pay for creation
 
         // Build Commit details
-        CommitProtocolV04.Commit memory newCommit = createCommit(address(stakeToken));
+        CommitProtocol.Commit memory newCommit = createCommit(address(stakeToken));
 
         // Create commit
         // Check correct fee amount
@@ -104,7 +104,7 @@ contract CommitProtocolV04Test is Test {
         assertEq(commitProtocol.commitIds(), 1, "commitIds should be 1 after creation");
 
         // Verify the commit data is stored properly
-        CommitProtocolV04.Commit memory stored = commitProtocol.getCommit(commitId);
+        CommitProtocol.Commit memory stored = commitProtocol.getCommit(commitId);
         assertEq(stored.creator, alice, "Creator mismatch");
         assertEq(stored.maxParticipants, 2, "Max participants mismatch");
         assertEq(stored.token, address(stakeToken), "Token mismatch");
@@ -138,8 +138,8 @@ contract CommitProtocolV04Test is Test {
         assertEq(address(protocolFeeRecipient).balance, 0.02 ether, "Join fee transfer mismatch");
 
         // Check Bob's participant status
-        CommitProtocolV04.ParticipantStatus status = commitProtocol.participants(commitId, bob);
-        assertEq(uint256(status), uint256(CommitProtocolV04.ParticipantStatus.joined));
+        CommitProtocol.ParticipantStatus status = commitProtocol.participants(commitId, bob);
+        assertEq(uint256(status), uint256(CommitProtocol.ParticipantStatus.joined));
 
         // Also check that stake got pulled in
         // commit.stake + commit.fee = 12 ether
@@ -328,19 +328,19 @@ contract CommitProtocolV04Test is Test {
         assertEq(aliceBalAfter - aliceBalBefore, 2 ether, "Incorrect withdrawal amount");
     }
 
-    function createCommit(address token) public view returns (CommitProtocolV04.Commit memory) {
-        return CommitProtocolV04.Commit({
+    function createCommit(address token) public view returns (CommitProtocol.Commit memory) {
+        return CommitProtocol.Commit({
             creator: alice,
             metadataURI: "ipfs://commitMetadata",
             joinBefore: block.timestamp + 1 days,
             verifyBefore: block.timestamp + 2 days,
             maxParticipants: 2,
-            joinVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
-            fulfillVerifier: CommitProtocolV04.Verifier({target: address(verifier), data: ""}),
+            joinVerifier: CommitProtocol.Verifier({target: address(verifier), data: ""}),
+            fulfillVerifier: CommitProtocol.Verifier({target: address(verifier), data: ""}),
             token: token,
             stake: 10 ether,
             fee: 2 ether,
-            client: CommitProtocolV04.ClientConfig({
+            client: CommitProtocol.ClientConfig({
                 recipient: address(0xBEEF),
                 shareBps: 500 // 5%
             })
@@ -363,8 +363,8 @@ contract CommitProtocolV04Test is Test {
         commitProtocol.cancel(commitId);
 
         // // Check status changed
-        CommitProtocolV04.CommitStatus commitStatus = commitProtocol.status(commitId);
-        assertEq(uint256(commitStatus), uint256(CommitProtocolV04.CommitStatus.cancelled));
+        CommitProtocol.CommitStatus commitStatus = commitProtocol.status(commitId);
+        assertEq(uint256(commitStatus), uint256(CommitProtocol.CommitStatus.cancelled));
         vm.stopPrank();
     }
 
@@ -389,8 +389,8 @@ contract CommitProtocolV04Test is Test {
         commitProtocol.cancel(commitId);
 
         // Check status changed
-        CommitProtocolV04.CommitStatus commitStatus = commitProtocol.status(commitId);
-        assertEq(uint256(commitStatus), uint256(CommitProtocolV04.CommitStatus.cancelled));
+        CommitProtocol.CommitStatus commitStatus = commitProtocol.status(commitId);
+        assertEq(uint256(commitStatus), uint256(CommitProtocol.CommitStatus.cancelled));
         vm.stopPrank();
 
         // 3. Bob requests refund
@@ -441,7 +441,7 @@ contract CommitProtocolV04Test is Test {
         FailingMockVerifier failingVerifier = new FailingMockVerifier();
 
         // Update commit to use failing verifier
-        CommitProtocolV04.Commit memory commit = commitProtocol.getCommit(commitId);
+        CommitProtocol.Commit memory commit = commitProtocol.getCommit(commitId);
         commit.fulfillVerifier.target = address(failingVerifier);
         vm.stopPrank();
 
@@ -452,8 +452,8 @@ contract CommitProtocolV04Test is Test {
         assertFalse(verified, "Verification should have failed");
 
         // 4. Check participant status remains unchanged
-        CommitProtocolV04.ParticipantStatus status = commitProtocol.participants(commitId, bob);
-        assertEq(uint256(status), uint256(CommitProtocolV04.ParticipantStatus.joined));
+        CommitProtocol.ParticipantStatus status = commitProtocol.participants(commitId, bob);
+        assertEq(uint256(status), uint256(CommitProtocol.ParticipantStatus.joined));
         vm.stopPrank();
     }
 
@@ -529,7 +529,7 @@ contract CommitProtocolV04Test is Test {
         vm.stopPrank();
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
-        CommitProtocolV04.Commit memory invalidCommit = createCommit(address(stakeToken));
+        CommitProtocol.Commit memory invalidCommit = createCommit(address(stakeToken));
         invalidCommit.token = newToken;
 
         vm.expectRevert(abi.encodeWithSignature("TokenNotApproved(address)", newToken));
@@ -543,8 +543,8 @@ contract CommitProtocolV04Test is Test {
         vm.deal(alice, 1 ether);
         uint256 commitId = commitProtocol.create{value: 0.01 ether}(createCommit(address(stakeToken)));
 
-        CommitProtocolV04.CommitStatus commitStatus = commitProtocol.status(commitId);
-        assertEq(uint256(commitStatus), uint256(CommitProtocolV04.CommitStatus.created));
+        CommitProtocol.CommitStatus commitStatus = commitProtocol.status(commitId);
+        assertEq(uint256(commitStatus), uint256(CommitProtocol.CommitStatus.created));
 
         // 2. Test cannot verify before join
         vm.expectRevert(
@@ -600,7 +600,7 @@ contract CommitProtocolV04Test is Test {
         vm.startPrank(protocolOwner);
         commitProtocol.verifyOverride(commitId, bob);
         assertEq(
-            uint256(commitProtocol.participants(commitId, bob)), uint256(CommitProtocolV04.ParticipantStatus.verified)
+            uint256(commitProtocol.participants(commitId, bob)), uint256(CommitProtocol.ParticipantStatus.verified)
         );
         vm.stopPrank();
 
@@ -674,7 +674,7 @@ contract CommitProtocolV04Test is Test {
         // 8. Verify final state
         assertEq(
             uint256(commitProtocol.participants(commitId, bob)),
-            uint256(CommitProtocolV04.ParticipantStatus.claimed),
+            uint256(CommitProtocol.ParticipantStatus.claimed),
             "Final participant status incorrect"
         );
         assertEq(commitProtocol.claims(address(stakeToken), alice), 0, "Creator claims not cleared");
@@ -728,7 +728,7 @@ contract CommitProtocolV04Test is Test {
         // 8. Verify final state
         assertEq(
             uint256(commitProtocol.participants(commitId, bob)),
-            uint256(CommitProtocolV04.ParticipantStatus.claimed),
+            uint256(CommitProtocol.ParticipantStatus.claimed),
             "Final participant status incorrect"
         );
         assertEq(commitProtocol.claims(address(stakeToken), alice), 0, "Creator claims not cleared");
@@ -785,7 +785,7 @@ contract CommitProtocolV04Test is Test {
         vm.startPrank(alice);
         vm.deal(alice, 1 ether);
 
-        CommitProtocolV04.Commit memory newCommit = createCommit(address(stakeToken));
+        CommitProtocol.Commit memory newCommit = createCommit(address(stakeToken));
         uint256 commitId = commitProtocol.create{value: 0.01 ether}(newCommit);
 
         // 2. Alice also funds this commit with altToken to ensure multiple tokens are tracked.
@@ -824,12 +824,12 @@ contract CommitProtocolV04Test is Test {
         vm.stopPrank();
         
         // Store pre-upgrade state
-        CommitProtocolV04.Commit memory preUpgradeCommit = commitProtocol.getCommit(commitId);
+        CommitProtocol.Commit memory preUpgradeCommit = commitProtocol.getCommit(commitId);
         uint256 preUpgradeBalance = commitProtocol.funds(address(stakeToken), commitId);
         
         // Store protocol config and approved tokens
-        (uint256 preMaxDuration, string memory preBaseURI, CommitProtocolV04.ProtocolFee memory preFee) = commitProtocol.config();
-        CommitProtocolV04.ProtocolConfig memory preUpgradeConfig = CommitProtocolV04.ProtocolConfig({
+        (uint256 preMaxDuration, string memory preBaseURI, CommitProtocol.ProtocolFee memory preFee) = commitProtocol.config();
+        CommitProtocol.ProtocolConfig memory preUpgradeConfig = CommitProtocol.ProtocolConfig({
             maxCommitDuration: preMaxDuration,
             baseURI: preBaseURI,
             fee: preFee
@@ -838,18 +838,18 @@ contract CommitProtocolV04Test is Test {
 
         // Perform upgrade
         vm.startPrank(protocolOwner);
-        implementationV2 = new CommitProtocolV04();
+        implementationV2 = new CommitProtocol();
         UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
         vm.stopPrank();
         
         // Verify state preserved
-        CommitProtocolV04.Commit memory postUpgradeCommit = commitProtocol.getCommit(commitId);
+        CommitProtocol.Commit memory postUpgradeCommit = commitProtocol.getCommit(commitId);
         assertEq(preUpgradeCommit.token, postUpgradeCommit.token);
         assertEq(preUpgradeBalance, commitProtocol.funds(address(stakeToken), commitId));
     }
 
     function testUpgradeAccessControl() public {
-        implementationV2 = new CommitProtocolV04();
+        implementationV2 = new CommitProtocol();
         
         vm.startPrank(alice);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", alice));
@@ -897,15 +897,15 @@ contract CommitProtocolV04Test is Test {
 
     function _verifyPreUpgradeState(uint256 commitId1, uint256 commitId2) internal {
         // Store pre-upgrade state
-        CommitProtocolV04.Commit memory preUpgradeCommit1 = commitProtocol.getCommit(commitId1);
-        CommitProtocolV04.Commit memory preUpgradeCommit2 = commitProtocol.getCommit(commitId2);
-        CommitProtocolV04.ParticipantStatus preUpgradeStatus1 = commitProtocol.participants(commitId1, bob);
-        CommitProtocolV04.ParticipantStatus preUpgradeStatus2 = commitProtocol.participants(commitId2, bob);
+        CommitProtocol.Commit memory preUpgradeCommit1 = commitProtocol.getCommit(commitId1);
+        CommitProtocol.Commit memory preUpgradeCommit2 = commitProtocol.getCommit(commitId2);
+        CommitProtocol.ParticipantStatus preUpgradeStatus1 = commitProtocol.participants(commitId1, bob);
+        CommitProtocol.ParticipantStatus preUpgradeStatus2 = commitProtocol.participants(commitId2, bob);
         uint256 preUpgradeBalance1 = commitProtocol.funds(address(stakeToken), commitId1);
         uint256 preUpgradeBalance2 = commitProtocol.funds(address(stakeToken), commitId2);
         
         // Store protocol config and approved tokens
-        (uint256 preMaxDuration, string memory preBaseURI, CommitProtocolV04.ProtocolFee memory preFee) = commitProtocol.config();
+        (uint256 preMaxDuration, string memory preBaseURI, CommitProtocol.ProtocolFee memory preFee) = commitProtocol.config();
         address[] memory preUpgradeApprovedTokens = commitProtocol.getApprovedTokens();
 
         // Store values in storage for later comparison
@@ -923,23 +923,23 @@ contract CommitProtocolV04Test is Test {
 
     function _performUpgrade() internal {
         vm.startPrank(protocolOwner);
-        implementationV2 = new CommitProtocolV04();
+        implementationV2 = new CommitProtocol();
         UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
         vm.stopPrank();
     }
 
     function _verifyPostUpgradeState(uint256 commitId1, uint256 commitId2) internal {
         // Verify all state is preserved
-        CommitProtocolV04.Commit memory postUpgradeCommit1 = commitProtocol.getCommit(commitId1);
-        CommitProtocolV04.Commit memory postUpgradeCommit2 = commitProtocol.getCommit(commitId2);
+        CommitProtocol.Commit memory postUpgradeCommit1 = commitProtocol.getCommit(commitId1);
+        CommitProtocol.Commit memory postUpgradeCommit2 = commitProtocol.getCommit(commitId2);
         
         // Check commit details preserved
         assertEq(s_preUpgradeCommit1.token, postUpgradeCommit1.token, "Commit1 token mismatch");
         assertEq(s_preUpgradeCommit2.token, postUpgradeCommit2.token, "Commit2 token mismatch");
         
         // Check participant statuses preserved
-        CommitProtocolV04.ParticipantStatus postStatus1 = commitProtocol.participants(commitId1, bob);
-        CommitProtocolV04.ParticipantStatus postStatus2 = commitProtocol.participants(commitId2, bob);
+        CommitProtocol.ParticipantStatus postStatus1 = commitProtocol.participants(commitId1, bob);
+        CommitProtocol.ParticipantStatus postStatus2 = commitProtocol.participants(commitId2, bob);
         
         assertEq(
             uint256(s_preUpgradeStatus1),
@@ -957,7 +957,7 @@ contract CommitProtocolV04Test is Test {
         assertEq(s_preUpgradeBalance2, commitProtocol.funds(address(stakeToken), commitId2), "Balance 2 mismatch");
         
         // Check protocol config preserved
-        (uint256 postMaxDuration, string memory postBaseURI, CommitProtocolV04.ProtocolFee memory postFee) = commitProtocol.config();
+        (uint256 postMaxDuration, string memory postBaseURI, CommitProtocol.ProtocolFee memory postFee) = commitProtocol.config();
         assertEq(s_preMaxDuration, postMaxDuration, "Max duration mismatch");
         assertEq(s_preBaseURI, postBaseURI, "Base URI mismatch");
         assertEq(s_preFee.fee, postFee.fee, "Fee mismatch");
@@ -973,15 +973,15 @@ contract CommitProtocolV04Test is Test {
     }
 
     // Storage variables for upgrade test state
-    CommitProtocolV04.Commit internal s_preUpgradeCommit1;
-    CommitProtocolV04.Commit internal s_preUpgradeCommit2;
-    CommitProtocolV04.ParticipantStatus internal s_preUpgradeStatus1;
-    CommitProtocolV04.ParticipantStatus internal s_preUpgradeStatus2;
+    CommitProtocol.Commit internal s_preUpgradeCommit1;
+    CommitProtocol.Commit internal s_preUpgradeCommit2;
+    CommitProtocol.ParticipantStatus internal s_preUpgradeStatus1;
+    CommitProtocol.ParticipantStatus internal s_preUpgradeStatus2;
     uint256 internal s_preUpgradeBalance1;
     uint256 internal s_preUpgradeBalance2;
     uint256 internal s_preMaxDuration;
     string internal s_preBaseURI;
-    CommitProtocolV04.ProtocolFee internal s_preFee;
+    CommitProtocol.ProtocolFee internal s_preFee;
     address[] internal s_preUpgradeApprovedTokens;
 
     function testUpgradeInitialization() public {
@@ -998,7 +998,7 @@ contract CommitProtocolV04Test is Test {
 
         // Perform upgrade
         vm.startPrank(protocolOwner);
-        implementationV2 = new CommitProtocolV04();
+        implementationV2 = new CommitProtocol();
         UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
         vm.stopPrank();
 
@@ -1019,10 +1019,10 @@ contract CommitProtocolV04Test is Test {
         vm.startPrank(protocolOwner);
         
         // Update protocol config (first storage slot)
-        CommitProtocolV04.ProtocolConfig memory newConfig = CommitProtocolV04.ProtocolConfig({
+        CommitProtocol.ProtocolConfig memory newConfig = CommitProtocol.ProtocolConfig({
             maxCommitDuration: 60 days,
             baseURI: "new-uri",
-            fee: CommitProtocolV04.ProtocolFee({
+            fee: CommitProtocol.ProtocolFee({
                 recipient: address(0x9999),
                 fee: 0.02 ether,
                 shareBps: 1000
@@ -1042,21 +1042,21 @@ contract CommitProtocolV04Test is Test {
         vm.stopPrank();
 
         // Store pre-upgrade state from different storage slots
-        (uint256 preMaxDuration, string memory preBaseURI, CommitProtocolV04.ProtocolFee memory preFee) = commitProtocol.config();
+        (uint256 preMaxDuration, string memory preBaseURI, CommitProtocol.ProtocolFee memory preFee) = commitProtocol.config();
         address[] memory preApprovedTokens = commitProtocol.getApprovedTokens();
-        CommitProtocolV04.Commit memory preCommit = commitProtocol.getCommit(commitId);
+        CommitProtocol.Commit memory preCommit = commitProtocol.getCommit(commitId);
         uint256 preCommitIds = commitProtocol.commitIds();
 
         // Perform upgrade
         vm.startPrank(protocolOwner);
-        implementationV2 = new CommitProtocolV04();
+        implementationV2 = new CommitProtocol();
         UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
         vm.stopPrank();
 
         // Verify all storage slots maintained their values
-        (uint256 postMaxDuration, string memory postBaseURI, CommitProtocolV04.ProtocolFee memory postFee) = commitProtocol.config();
+        (uint256 postMaxDuration, string memory postBaseURI, CommitProtocol.ProtocolFee memory postFee) = commitProtocol.config();
         address[] memory postApprovedTokens = commitProtocol.getApprovedTokens();
-        CommitProtocolV04.Commit memory postCommit = commitProtocol.getCommit(commitId);
+        CommitProtocol.Commit memory postCommit = commitProtocol.getCommit(commitId);
         uint256 postCommitIds = commitProtocol.commitIds();
 
         // Assert storage layout is preserved
@@ -1114,7 +1114,7 @@ contract CommitProtocolV04Test is Test {
 
         // Perform upgrade
         vm.startPrank(protocolOwner);
-        implementationV2 = new CommitProtocolV04();
+        implementationV2 = new CommitProtocol();
         UUPSUpgradeable(address(commitProtocol)).upgradeToAndCall(address(implementationV2), "");
         vm.stopPrank();
 

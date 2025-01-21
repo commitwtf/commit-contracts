@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-import {CommitProtocolV04} from "../src/CommitProtocolV04.sol";
+import {CommitProtocol} from "../src/CommitProtocol.sol";
 import {SignatureVerifier} from "../src/verifiers/SignatureVerifier.sol";
 import {TokenUtils} from "../src/libraries/TokenUtils.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -16,8 +16,8 @@ import {MockVerifier} from "../src/mocks/VerifierMock.sol";
 import {TokenVerifier, ERC1155Verifier} from "../src/verifiers/TokenVerifier.sol";
 import {SignatureVerifier} from "../src/verifiers/SignatureVerifier.sol";
 
-contract CommitProtocolV04Test is Test {
-    CommitProtocolV04 internal commitProtocol;
+contract CommitProtocolTest is Test {
+    CommitProtocol internal commitProtocol;
     TokenVerifier internal tokenVerifier;
     ERC1155Verifier internal erc1155Verifier;
     SignatureVerifier internal signatureVerifier;

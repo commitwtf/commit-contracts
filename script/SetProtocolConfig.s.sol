@@ -3,16 +3,16 @@ pragma solidity ^0.8.28;
 
 import {Script} from "../lib/forge-std/src/Script.sol";
 import {console} from "../lib/forge-std/src/console.sol";
-import {CommitProtocolV04} from "../src/CommitProtocolV04.sol";
+import {CommitProtocol} from "../src/CommitProtocol.sol";
 
 contract SetProtocolConfig is Script {
     function run() public {
         address protocolAddress = vm.envAddress("PROTOCOL_ADDRESS");
 
-        CommitProtocolV04.ProtocolConfig memory config = CommitProtocolV04.ProtocolConfig({
+        CommitProtocol.ProtocolConfig memory config = CommitProtocol.ProtocolConfig({
             maxCommitDuration: 31536000, // 365 days in seconds
             baseURI: "https://commit.wtf",
-            fee: CommitProtocolV04.ProtocolFee({
+            fee: CommitProtocol.ProtocolFee({
                 recipient: 0x7c145a1B6527DeD57D741331e15f01f5818E7F8c,
                 fee: 200000000000000, // 0.0002 ETH in wei
                 shareBps: 100 // 1%
@@ -22,7 +22,7 @@ contract SetProtocolConfig is Script {
         vm.startBroadcast();
 
         // Get protocol contract instance
-        CommitProtocolV04 protocol = CommitProtocolV04(protocolAddress);
+        CommitProtocol protocol = CommitProtocol(protocolAddress);
 
         // Call setProtocolConfig
         protocol.setProtocolConfig(config);

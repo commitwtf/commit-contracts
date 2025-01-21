@@ -14,10 +14,10 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {TokenUtils} from "./libraries/TokenUtils.sol";
 import {IVerifier} from "./interfaces/IVerifier.sol";
 
-/// @title CommitProtocolV04
+/// @title CommitProtocol
 /// @notice Enables users to create and participate in commitment-based challenges
 
-contract CommitProtocolV04 is
+contract CommitProtocol is
     UUPSUpgradeable,
     ReentrancyGuardUpgradeable,
     OwnableUpgradeable,

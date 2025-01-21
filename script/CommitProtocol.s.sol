@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {Script} from "../lib/forge-std/src/Script.sol";
 import {console} from "../lib/forge-std/src/console.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
-import {CommitProtocolV04} from "../src/CommitProtocolV04.sol";
+import {CommitProtocol} from "../src/CommitProtocol.sol";
 
 contract DeployCommitProtocol is Script {
     function run() public {
@@ -13,7 +13,7 @@ contract DeployCommitProtocol is Script {
         vm.startBroadcast();
 
         address proxy =
-            Upgrades.deployUUPSProxy("CommitProtocolV04.sol", abi.encodeCall(CommitProtocolV04.initialize, (owner)));
+            Upgrades.deployUUPSProxy("CommitProtocol.sol", abi.encodeCall(CommitProtocol.initialize, (owner)));
 
         vm.stopBroadcast();
 
