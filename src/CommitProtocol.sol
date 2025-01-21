@@ -301,8 +301,8 @@ contract CommitProtocol is
 
         uint256 amount = fundsByAddress[token][commitId][msg.sender];
 
-        // Prevent participants from withdrawing their stake
-        if (participants[commitId][msg.sender] == ParticipantStatus.joined) {
+        // Prevent participants from withdrawing their stake (init here means they have not joined)
+        if (participants[commitId][msg.sender] != ParticipantStatus.init) {
             if (amount < commit.stake) {
                 revert InsufficientAmount();
             }
