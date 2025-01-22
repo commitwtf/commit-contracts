@@ -27,6 +27,11 @@ contract CommitProtocol is
 {
     using EnumerableSet for EnumerableSet.AddressSet;
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();  // This only affects the implementation contract
+    }
+
     function initialize(address initialOwner) public initializer {
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
