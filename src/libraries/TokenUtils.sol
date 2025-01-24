@@ -46,8 +46,10 @@ library TokenUtils {
             require(msg.value == amount, "Incorrect ETH amount sent");
 
             // ETH already received with the call, so we just forward it to 'to'
-            (bool success,) = payable(to).call{value: amount}("");
-            require(success, "ETH transfer failed");
+            if (to != address(this)) {
+                (bool success,) = payable(to).call{value: amount}("");
+                require(success, "ETH transfer failed");
+            }
         } else {
             // Safe transferFrom for ERC20 token
             IERC20(token).safeTransferFrom(from, to, amount);
